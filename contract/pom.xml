@@ -29,8 +29,8 @@
 
 		<!-- gRPC properties -->
 		<grpc.version>1.25.0</grpc.version>
-		<protobuf.version>3.10.0</protobuf.version>
-		<protoc.version>3.10.0</protoc.version>
+		<protobuf.version>3.10.1</protobuf.version>
+		<protoc.version>3.10.1</protoc.version>
 
 		<protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
 	</properties>
