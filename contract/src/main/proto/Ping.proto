@@ -1,0 +1,17 @@
+//
+// Protocol buffers definition for ping service
+//
+syntax = "proto3";
+package com.r3ds;
+
+message PingRequest {
+	string message = 1;
+}
+
+message PingResponse {
+	string response = 1;
+}
+
+service PingService {
+	rpc ping(PingRequest) returns (PingResponse);
+}
