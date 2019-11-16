@@ -3,7 +3,6 @@ package com.r3ds.server;
 import com.r3ds.Ping;
 import com.r3ds.PingServiceGrpc;
 
-import io.grpc.Grpc;
 import io.grpc.stub.StreamObserver;
 
 public class PingServiceImpl extends PingServiceGrpc.PingServiceImplBase {

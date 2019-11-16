@@ -21,9 +21,6 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-		<maven.compiler.source>1.8</maven.compiler.source>
-		<maven.compiler.target>1.8</maven.compiler.target>
-
 		<exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
 
 		<!-- application properties -->
@@ -31,6 +28,7 @@
 
 		<server.host>localhost</server.host>
 		<server.port>8080</server.port>
+		<client.ca.certificate>${project.parent.basedir}/ca/certificate.pem</client.ca.certificate>
 	</properties>
 
 	<dependencies>
@@ -70,6 +68,7 @@
 					<arguments>
 						<argument>${server.host}</argument>
 						<argument>${server.port}</argument>
+						<argument>${client.ca.certificate}</argument>
 					</arguments>
 				</configuration>
 			</plugin>
