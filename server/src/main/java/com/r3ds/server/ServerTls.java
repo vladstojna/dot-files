@@ -46,6 +46,7 @@ public class ServerTls {
 	public void start() throws IOException {
 		server = NettyServerBuilder.forPort(port)
 			.addService(new PingServiceImpl())
+			.addService(new AuthServiceImpl())
 			.sslContext(getSslContext())
 			.build()
 			.start();

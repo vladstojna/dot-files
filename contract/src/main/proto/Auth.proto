@@ -1,0 +1,28 @@
+//
+// Protocol buffers definition for auth service
+//
+syntax = "proto3";
+package com.r3ds;
+
+message SignupRequest {
+	string username = 1;
+	string password = 2;
+}
+
+message SignupResponse {
+	bool isSignedUp = 1;
+}
+
+message LoginRequest {
+	string username = 1;
+	string password = 2;
+}
+
+message LoginResponse {
+	bool isLoggedIn = 1;
+}
+
+service AuthService {
+	rpc signup(SignupRequest) returns (SignupResponse);
+	rpc login(LoginRequest) returns (LoginResponse);
+}
