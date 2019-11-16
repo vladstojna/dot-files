@@ -15,7 +15,7 @@ public class Database {
      *
      * @return Connection
      */
-    public static Connection getConnection() {
+    public static void /*Connection*/ getConnection() {
         /*try (InputStream input = new FileInputStream("../../../resources/database/config.properties")) {
             Properties prop = new Properties();
 
