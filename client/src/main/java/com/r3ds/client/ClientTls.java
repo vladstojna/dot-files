@@ -1,5 +1,6 @@
 package com.r3ds.client;
 
+import com.google.common.hash.Hashing;
 import com.r3ds.Auth;
 import com.r3ds.AuthServiceGrpc;
 import io.grpc.ManagedChannel;
@@ -13,9 +14,9 @@ import io.netty.handler.ssl.SslContextBuilder;
 import com.r3ds.PingServiceGrpc;
 import com.r3ds.Ping.PingRequest;
 import com.r3ds.Ping.PingResponse;
-import org.mindrot.jbcrypt.BCrypt;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -31,6 +32,8 @@ public class ClientTls {
 	private final ManagedChannel channel;
 	private final PingServiceGrpc.PingServiceBlockingStub blockingStub;
 	private final AuthServiceGrpc.AuthServiceBlockingStub authBlockingStub;
+	
+	private String username;
 
 	private static SslContext getSslContext(String trustCertCollectionFilePath) throws SSLException {
 		return SslContextBuilder
@@ -55,6 +58,9 @@ public class ClientTls {
 		this.channel = channel;
 		this.blockingStub = PingServiceGrpc.newBlockingStub(channel);
 		this.authBlockingStub = AuthServiceGrpc.newBlockingStub(channel);
+		
+		// it means that nobody is logged in
+		this.username = null;
 	}
 
 	public void shutdown() throws InterruptedException {
@@ -84,7 +90,9 @@ public class ClientTls {
 	 */
 	public void signup(List<String> args) {
 		String username = args.get(0);
-		String password = BCrypt.hashpw(args.get(1), BCrypt.gensalt());
+		String password = Hashing.sha256()
+				.hashString(args.get(1), StandardCharsets.UTF_8)
+				.toString();
 		logger.log(Level.INFO, () -> String.format("Request: Signup with username '%1$s' and password '%2$s'", username, password));
 		Auth.Credentials request = Auth.Credentials.newBuilder()
 				.setUsername(username)
@@ -97,5 +105,42 @@ public class ClientTls {
 			return;
 		}
 		logger.log(Level.INFO, "Signup successful");
+	}
+	
+	/**
+	 * Authenticates a user in the server
+	 *
+	 * @param args
+	 */
+	public void login(List<String> args) {
+		String username = args.get(0);
+		String realPassword = args.get(1);
+		String passwordToServer = Hashing.sha256()
+				.hashString(realPassword, StandardCharsets.UTF_8)
+				.toString();
+		logger.log(Level.INFO, () -> String.format("Request: Login with username '%1$s' and password '%2$s'", username, passwordToServer));
+		Auth.Credentials request = Auth.Credentials.newBuilder()
+				.setUsername(username)
+				.setPassword(passwordToServer)
+				.build();
+		try {
+			authBlockingStub.login(request);
+		} catch (StatusRuntimeException e) {
+			logger.log(Level.WARNING, "Login failed: {0}", e.getMessage());
+			return;
+		}
+		// it means that is logged in from now on
+		this.username = username;
+		logger.log(Level.INFO, "Login successful");
+	}
+	
+	/**
+	 * Removes the client authentication (from client side app)
+	 */
+	public void logout() {
+		logger.log(Level.INFO, () -> String.format("Request: Logout with username '%1$s'", this.username));
+		// it means that nobody is logged in from now on
+		this.username = null;
+		logger.log(Level.INFO, "Logout successful");
 	}
 }
