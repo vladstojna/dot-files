@@ -13,6 +13,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import com.r3ds.PingServiceGrpc;
 import com.r3ds.Ping.PingRequest;
 import com.r3ds.Ping.PingResponse;
+import org.mindrot.jbcrypt.BCrypt;
 
 import java.io.File;
 import java.util.List;
@@ -77,23 +78,24 @@ public class ClientTls {
 	}
 	
 	/**
+	 * Creates a new user in the server
 	 *
 	 * @param args
 	 */
 	public void signup(List<String> args) {
-		logger.log(Level.INFO, "Request: Signup with ", args.get(0));
-		Auth.SignupRequest request = Auth.SignupRequest.newBuilder()
-				.setUsername(args.get(0))
-				.setPassword(args.get(1))
+		String username = args.get(0);
+		String password = BCrypt.hashpw(args.get(1), BCrypt.gensalt());
+		logger.log(Level.INFO, () -> String.format("Request: Signup with username '%1$s' and password '%2$s'", username, password));
+		Auth.Credentials request = Auth.Credentials.newBuilder()
+				.setUsername(username)
+				.setPassword(password)
 				.build();
-		Auth.SignupResponse response;
 		try {
-			response = authBlockingStub.signup(request);
+			authBlockingStub.signup(request);
 		} catch (StatusRuntimeException e) {
-			logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
+			logger.log(Level.WARNING, "Signup failed: {0}", e.getMessage());
 			return;
 		}
-		logger.log(Level.INFO, "Response: {0}", response.getMessage());
-
+		logger.log(Level.INFO, "Signup successful");
 	}
 }

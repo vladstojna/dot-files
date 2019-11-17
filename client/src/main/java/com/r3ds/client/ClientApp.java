@@ -2,7 +2,8 @@ package com.r3ds.client;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -32,13 +33,29 @@ public class ClientApp
 			String input;
 			List<String> inputArgs = null;
 			String methodName;
-
+			
+			System.out.println();
+			System.out.print(">>> ");
+			
 			BufferedReader buffer = new BufferedReader(new InputStreamReader(System.in));
 			while (!(input = buffer.readLine().toLowerCase()).equals("exit")) {
-				inputArgs = Arrays.asList(input.split(" "));
+				inputArgs = new ArrayList<>(Arrays.asList(input.split("\\s+")));
 				methodName = inputArgs.get(0);
 				inputArgs.remove(0);
-				client.getClass().getDeclaredMethod(methodName).invoke(inputArgs);
+				
+				try {
+					// Reflection - in this case, discover what method has to call
+					Method method = client.getClass().getDeclaredMethod(methodName, List.class);
+					// call the found method in client object with the given args
+					method.invoke(client, inputArgs);
+				} catch (SecurityException | NoSuchMethodException e) {
+					System.out.println("You have no access to this method");
+				} catch (IllegalArgumentException | IllegalAccessException | InvocationTargetException e) {
+					// it should not be get here since all methods will receive a list of strings as argument
+					System.out.println("Something unexpected happened. Please try again");
+				}
+				System.out.println();
+				System.out.print(">>> ");
 			}
 		} finally {
 			client.shutdown();
