@@ -1,5 +1,7 @@
 package com.r3ds.server;
 
+import com.r3ds.server.exception.DatabaseException;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,9 +16,10 @@ public class Database {
      * Return a connection to DB
      *
      * @return Connection
+     * @throws DatabaseException
      */
-    public static void /*Connection*/ getConnection() {
-        /*try (InputStream input = new FileInputStream("../../../resources/database/config.properties")) {
+    public static Connection getConnection() throws DatabaseException {
+        try (InputStream input = new FileInputStream("../../../resources/database/config.properties")) {
             Properties prop = new Properties();
 
             // load a properties file
@@ -33,8 +36,7 @@ public class Database {
                     "jdbc:mysql://localhost:" + dbPort + "/" + dbName, dbUsername, dbPassword);
         } catch (IOException | ClassNotFoundException | SQLException e) {
             System.out.println(e);
+            throw new DatabaseException("The database connection failed.", e);
         }
-
-        return null;*/
     }
 }

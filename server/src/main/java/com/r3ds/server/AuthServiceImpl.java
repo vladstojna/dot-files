@@ -3,10 +3,7 @@ package com.r3ds.server;
 import com.r3ds.Auth;
 import com.r3ds.AuthServiceGrpc;
 
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 
 public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 
@@ -17,32 +14,29 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
                        io.grpc.stub.StreamObserver<com.r3ds.Auth.SignupResponse> responseObserver) {
 
         if (verbose)
-            System.out.printf("Received ping %s%n", request);
+            System.out.printf("Signup - create account with username %s%n", request.getUsername());
 
-        // connect to db and create an account
-        String username = request.getUsername();
-        String password = request.getPassword();
-
-        Auth.SignupResponse response = Auth.SignupResponse.newBuilder()
-                .setIsSignedUp(true)
-                .build();
-
-        Connection con = null;
-        /*try {
-            con = Database.getConnection();
-            Statement stmt = con.createStatement();
-            ResultSet rs = stmt.executeQuery("select * from emp");
-            while(rs.next())
-                System.out.println(rs.getInt(1) + "  " + rs.getString(2) + "  " + rs.getString(3));
+        Connection conn = null;
+        try {
+            conn = Database.getConnection();
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO user(username, password) VALUES (?, ?)");
+            stmt.setString(1, request.getUsername());
+            stmt.setString(2, request.getPassword());
+            stmt.execute();
+            conn.close();
         } catch (Exception e) {
             System.out.println("Query failed"); // TODO: resolver este try
         } finally {
             try {
-                if (con != null) con.close();
+                if (conn != null) conn.close();
             } catch (SQLException e) {
                 System.out.println("Close failure"); // TODO: resolver este try
             }
-        }*/
+        }
+
+        Auth.SignupResponse response = Auth.SignupResponse.newBuilder()
+                .setIsSignedUp(true)
+                .build();
 
         responseObserver.onNext(response);
         responseObserver.onCompleted();

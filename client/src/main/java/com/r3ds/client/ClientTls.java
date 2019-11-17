@@ -1,5 +1,7 @@
 package com.r3ds.client;
 
+import com.r3ds.Auth;
+import com.r3ds.AuthServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NettyChannelBuilder;
@@ -13,6 +15,7 @@ import com.r3ds.Ping.PingRequest;
 import com.r3ds.Ping.PingResponse;
 
 import java.io.File;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -26,6 +29,7 @@ public class ClientTls {
 
 	private final ManagedChannel channel;
 	private final PingServiceGrpc.PingServiceBlockingStub blockingStub;
+	private final AuthServiceGrpc.AuthServiceBlockingStub authBlockingStub;
 
 	private static SslContext getSslContext(String trustCertCollectionFilePath) throws SSLException {
 		return SslContextBuilder
@@ -49,6 +53,7 @@ public class ClientTls {
 	private ClientTls(ManagedChannel channel) {
 		this.channel = channel;
 		this.blockingStub = PingServiceGrpc.newBlockingStub(channel);
+		this.authBlockingStub = AuthServiceGrpc.newBlockingStub(channel);
 	}
 
 	public void shutdown() throws InterruptedException {
@@ -69,5 +74,26 @@ public class ClientTls {
 			return;
 		}
 		logger.log(Level.INFO, "Response: {0}", response.getMessage());
+	}
+	
+	/**
+	 *
+	 * @param args
+	 */
+	public void signup(List<String> args) {
+		logger.log(Level.INFO, "Request: Signup with ", args.get(0));
+		Auth.SignupRequest request = Auth.SignupRequest.newBuilder()
+				.setUsername(args.get(0))
+				.setPassword(args.get(1))
+				.build();
+		Auth.SignupResponse response;
+		try {
+			response = authBlockingStub.signup(request);
+		} catch (StatusRuntimeException e) {
+			logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
+			return;
+		}
+		logger.log(Level.INFO, "Response: {0}", response.getMessage());
+
 	}
 }
