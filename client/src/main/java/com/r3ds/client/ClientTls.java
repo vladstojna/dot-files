@@ -34,6 +34,8 @@ public class ClientTls {
 	private final AuthServiceGrpc.AuthServiceBlockingStub authBlockingStub;
 	
 	private String username;
+	// key that belongs to a user and will be responsible to decipher files
+	private String symmetricKey;
 
 	private static SslContext getSslContext(String trustCertCollectionFilePath) throws SSLException {
 		return SslContextBuilder
@@ -61,6 +63,7 @@ public class ClientTls {
 		
 		// it means that nobody is logged in
 		this.username = null;
+		this.symmetricKey = null;
 	}
 
 	public void shutdown() throws InterruptedException {
@@ -131,6 +134,9 @@ public class ClientTls {
 		}
 		// it means that is logged in from now on
 		this.username = username;
+		this.symmetricKey = Hashing.sha512()
+				.hashString(username + realPassword, StandardCharsets.UTF_8)
+				.toString();
 		logger.log(Level.INFO, "Login successful");
 	}
 	
@@ -141,6 +147,7 @@ public class ClientTls {
 		logger.log(Level.INFO, () -> String.format("Request: Logout with username '%1$s'", this.username));
 		// it means that nobody is logged in from now on
 		this.username = null;
+		this.symmetricKey = null;
 		logger.log(Level.INFO, "Logout successful");
 	}
 }
