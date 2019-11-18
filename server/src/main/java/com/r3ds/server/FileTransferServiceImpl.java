@@ -40,7 +40,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 
 			// check database for path and if user can download it
 			// temporary path value, user's home
-			String path = Paths.get(System.getProperty("user.home"), request.getFilename()).toString();
+			String path = Paths.get(System.getProperty("user.home"), "r3ds-files", "server", request.getFilename()).toString();
 
 			BufferedInputStream reader = new BufferedInputStream(
 				new FileInputStream(path));
@@ -76,21 +76,56 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 	public StreamObserver<UploadData> upload(final StreamObserver<UploadResponse> responseObserver) {
 
 		return new StreamObserver<UploadData>() {
+			int callCount = 0;
+			BufferedOutputStream writer = null;
 
 			// TODO: validate in DB and write to file
 			@Override
 			public void onNext(UploadData uploadData) {
+				logger.info("Upload chunk #{} from '{}' for file '{}'", callCount,
+					uploadData.getCredentials().getUsername(), uploadData.getFilename());
+				callCount++;
+
+				// check database for path and if user can upload it
+				// temporary path value, user's home
+				String path = Paths.get(System.getProperty("user.home"), "r3ds-files", "server", uploadData.getFilename()).toString();
+
+				byte[] content = uploadData.getContent().toByteArray();
+
+				try {
+					if (writer == null) {
+						writer = new BufferedOutputStream(new FileOutputStream(path));
+					}
+					writer.write(content);
+					writer.flush();
+				} catch (IOException e) {
+					e.printStackTrace();
+					responseObserver.onError(Status.INTERNAL
+						.withDescription("Error uploading file, please try again.")
+						.withCause(e)
+						.asRuntimeException());
+				}
+
 			}
 
 			@Override
 			public void onError(Throwable t) {
-				logger.error(t.getMessage());
+				logger.error("Encountered error during upload", t);
 			}
 
 			@Override
 			public void onCompleted() {
 				responseObserver.onNext(UploadResponse.newBuilder().build());
 				responseObserver.onCompleted();
+				if (writer != null) {
+					try {
+						writer.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					} finally {
+						writer = null;
+					}
+				}
 			}
 		};
 	}
