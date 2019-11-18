@@ -2,6 +2,7 @@ package com.r3ds.server;
 
 import com.r3ds.Auth;
 import com.r3ds.AuthServiceGrpc;
+import com.r3ds.Common.Credentials;
 import com.r3ds.server.exception.AuthException;
 import io.grpc.Status;
 import org.mindrot.jbcrypt.BCrypt;
@@ -13,7 +14,7 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
     private boolean verbose = true;
 
     @Override
-    public void signup(com.r3ds.Auth.Credentials request,
+    public void signup(Credentials request,
                        io.grpc.stub.StreamObserver<com.r3ds.Auth.SignupResponse> responseObserver) {
 
         if (verbose)
@@ -72,7 +73,7 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
         responseObserver.onCompleted();
     }
 
-    public void login(com.r3ds.Auth.Credentials request,
+    public void login(Credentials request,
                       io.grpc.stub.StreamObserver<com.r3ds.Auth.LoginResponse> responseObserver) {
     
         if (verbose)

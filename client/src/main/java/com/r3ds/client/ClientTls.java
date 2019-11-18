@@ -3,6 +3,7 @@ package com.r3ds.client;
 import com.google.common.hash.Hashing;
 import com.r3ds.Auth;
 import com.r3ds.AuthServiceGrpc;
+import com.r3ds.Common.Credentials;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NettyChannelBuilder;
@@ -97,7 +98,7 @@ public class ClientTls {
 				.hashString(args.get(1), StandardCharsets.UTF_8)
 				.toString();
 		logger.log(Level.INFO, () -> String.format("Request: Signup with username '%1$s' and password '%2$s'", username, password));
-		Auth.Credentials request = Auth.Credentials.newBuilder()
+		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
 				.setPassword(password)
 				.build();
@@ -122,7 +123,7 @@ public class ClientTls {
 				.hashString(realPassword, StandardCharsets.UTF_8)
 				.toString();
 		logger.log(Level.INFO, () -> String.format("Request: Login with username '%1$s' and password '%2$s'", username, passwordToServer));
-		Auth.Credentials request = Auth.Credentials.newBuilder()
+		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
 				.setPassword(passwordToServer)
 				.build();
