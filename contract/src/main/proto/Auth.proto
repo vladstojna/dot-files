@@ -4,10 +4,7 @@
 syntax = "proto3";
 package com.r3ds;
 
-message Credentials {
-	string username = 1;
-	string password = 2;
-}
+import "Common.proto";
 
 message SignupResponse {
 }

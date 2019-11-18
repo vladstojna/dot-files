@@ -1,0 +1,14 @@
+//
+// Protocol buffers definition for common messages
+//
+syntax = "proto3";
+package com.r3ds;
+
+message Credentials {
+	string username = 1;
+	string password = 2;
+}
+
+message Nonce {
+	uint64 value = 1;
+}

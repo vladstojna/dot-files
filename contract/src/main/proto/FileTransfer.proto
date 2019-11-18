@@ -1,0 +1,30 @@
+//
+// Protocol buffers definition for file transfer service
+//
+syntax = "proto3";
+package com.r3ds;
+
+import "Common.proto";
+
+message DownloadRequest {
+	Credentials credentials = 1;
+	string filename = 2;
+}
+
+message Chunk {
+	bytes content = 1;
+}
+
+message UploadData {
+	Credentials credentials = 1;
+	string filename = 2;
+	bytes content = 3;
+}
+
+message UploadResponse {
+}
+
+service FileTransferService {
+	rpc upload(stream UploadData) returns (UploadResponse);
+	rpc download(DownloadRequest) returns (stream Chunk);
+}
