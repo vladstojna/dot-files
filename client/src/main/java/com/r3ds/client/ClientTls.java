@@ -1,5 +1,7 @@
 package com.r3ds.client;
 
+import com.google.common.hash.HashCode;
+import com.google.common.hash.Hashing;
 import com.r3ds.AuthServiceGrpc;
 import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.Common.Credentials;
@@ -22,9 +24,12 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.Key;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.util.Iterator;
 import java.util.List;
@@ -33,8 +38,6 @@ import java.util.concurrent.TimeUnit;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.net.ssl.SSLException;
-
-import org.mindrot.jbcrypt.BCrypt;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +58,6 @@ public class ClientTls {
 	// PBEKeySpec does not permit an empty salt
 	// Sadly we cannot use a random salt due to the key being generated
 	// for the same account multiple times (e.g. per startup)
-	private final String saltPlaceholder = "UYeJ6Cp1eEkNbEVc";
 	private final String keyDerivationAlgo = "PBKDF2WithHmacSHA512";
 	private final int iterations = 1024;
 	private final int keyLen = 256;
@@ -83,21 +85,25 @@ public class ClientTls {
 			.trustManager(new File(trustCertCollectionFilePath)).build();
 	}
 
-	private static Key deriveKey(String pw, byte[] salt, int iterations, int keyLen, String kdAlgo)
-			throws GeneralSecurityException {
-		SecretKeyFactory kf = SecretKeyFactory.getInstance(kdAlgo);
-		KeySpec spec = new PBEKeySpec(pw.toCharArray(), salt, iterations, keyLen);
-		Key key = kf.generateSecret(spec);
-		return key;
+	private static Key deriveKey(char[] pw, byte[] salt, int iterations, int keyLen, String kdAlgo) {
+		PBEKeySpec spec = new PBEKeySpec(pw, salt, iterations, keyLen);
+		try {
+			SecretKeyFactory kf = SecretKeyFactory.getInstance(kdAlgo);
+			Key key = kf.generateSecret(spec);
+			return key;
+		} catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+			throw new AssertionError("Error deriving key", e);
+		} finally {
+			spec.clearPassword();
+		}
 	}
 
-	private Key deriveKey(String password) {
-		try {
-			return deriveKey(password, saltPlaceholder.getBytes(), iterations, keyLen, keyDerivationAlgo);
-		} catch (GeneralSecurityException e) {
-			// Should never happen since we use valid and immutable input to derive the key
-			throw new RuntimeException("Error derivating key: " + e.getMessage());
-		}
+	private Key deriveKey(String password, String username) {
+		return deriveKey(password.toCharArray(), hash(username).asBytes(), iterations, keyLen, keyDerivationAlgo);
+	}
+
+	private HashCode hash(String text) {
+		return Hashing.sha256().hashString(text, StandardCharsets.UTF_8);
 	}
 
 	public ClientTls(String host, int port, String trustCertCollectionFilePath) throws SSLException {
@@ -148,7 +154,7 @@ public class ClientTls {
 		}
 
 		String username = args.get(0);
-		String password = BCrypt.hashpw(args.get(1), BCrypt.gensalt());
+		String password = hash(args.get(1)).toString();
 		logger.info("Request: Signup with username '{}' and password '{}'", username, password);
 		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
@@ -200,7 +206,7 @@ public class ClientTls {
 
 		String username = args.get(0);
 		String realPassword = args.get(1);
-		String passwordToServer = BCrypt.hashpw(realPassword, BCrypt.gensalt());
+		String passwordToServer = hash(realPassword).toString();
 		logger.info("Request: Login with username '{}' and password '{}'", username, passwordToServer);
 		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
@@ -212,7 +218,7 @@ public class ClientTls {
 			logger.warn("Login failed: {}", e.getMessage());
 			return;
 		}
-		setLoggedIn(username, passwordToServer, deriveKey(realPassword));
+		setLoggedIn(username, passwordToServer, deriveKey(realPassword, username));
 		logger.info("Login successful");
 	}
 	
