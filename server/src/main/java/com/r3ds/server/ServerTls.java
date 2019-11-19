@@ -47,6 +47,7 @@ public class ServerTls {
 		server = NettyServerBuilder.forPort(port)
 			.addService(new PingServiceImpl())
 			.addService(new AuthServiceImpl())
+			.addService(new FileTransferServiceImpl())
 			.sslContext(getSslContext())
 			.build()
 			.start();
