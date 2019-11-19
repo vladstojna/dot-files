@@ -33,9 +33,9 @@ public class ClientApp
 			String input;
 			List<String> inputArgs = null;
 			String methodName;
-			
-			System.out.println();
-			System.out.print(">>> ");
+
+			System.out.print("\n>>> ");
+			System.out.flush();
 			
 			BufferedReader buffer = new BufferedReader(new InputStreamReader(System.in));
 			while (!(input = buffer.readLine().toLowerCase()).equals("exit")) {
@@ -49,13 +49,15 @@ public class ClientApp
 					// call the found method in client object with the given args
 					method.invoke(client, inputArgs);
 				} catch (SecurityException | NoSuchMethodException e) {
-					System.out.println("You have no access to this method");
+					e.printStackTrace();
+					System.out.println(e.getMessage());
 				} catch (IllegalArgumentException | IllegalAccessException | InvocationTargetException e) {
 					// it should not be get here since all methods will receive a list of strings as argument
-					System.out.println("Something unexpected happened. Please try again");
+					e.printStackTrace();
+					System.out.println(e.getMessage());
 				}
-				System.out.println();
-				System.out.print(">>> ");
+				System.out.print("\n>>> ");
+				System.out.flush();
 			}
 		} finally {
 			client.shutdown();
