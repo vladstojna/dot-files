@@ -2,37 +2,44 @@ package com.r3ds.client;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
+import com.google.protobuf.ByteString;
+
 import com.r3ds.AuthServiceGrpc;
 import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.Common.Credentials;
 import com.r3ds.FileTransfer.Chunk;
 import com.r3ds.FileTransfer.DownloadRequest;
+import com.r3ds.FileTransfer.UploadData;
+import com.r3ds.FileTransfer.UploadResponse;
 import com.r3ds.PingServiceGrpc;
 import com.r3ds.Ping.PingRequest;
 import com.r3ds.Ping.PingResponse;
+import com.r3ds.client.exception.ClientException;
 
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
-import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.KeySpec;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import javax.crypto.SecretKeyFactory;
@@ -63,6 +70,8 @@ public class ClientTls {
 	private final int keyLen = 256;
 
 	private final String encryptionAlgo = "AES_256";
+
+	private final int BUFFER_SIZE = 4096;
 
 	// this users unique symmetric key used to cipher their documents
 	private Key symmetricKey;
@@ -241,7 +250,7 @@ public class ClientTls {
 	 *
 	 * @param args
 	 */
-	public void download(List<String> args) {
+	public void download(List<String> args) throws ClientException {
 		if (!isLoggedIn) {
 			logger.info("Not logged in");
 			return;
@@ -266,8 +275,8 @@ public class ClientTls {
 		if (file.isDirectory()) {
 			file = Paths.get(destinationPath, filename).toFile();
 		} else if (file.getParentFile() != null && !file.getParentFile().isDirectory()) {
-			logger.error("Destination path does not exist: {}", destinationPath);
-			return;
+			logger.warn("{} (no such file or directory)}", destinationPath);
+			throw new ClientException(destinationPath + "(no such file or directory)");
 		}
 
 		Iterator<Chunk> content;
@@ -281,16 +290,98 @@ public class ClientTls {
 			writer.close();
 		} catch (StatusRuntimeException e) {
 			logger.warn("Download failed: {}", e.getMessage());
-			return;
+			throw new ClientException("Download failed: " + e.getMessage());
 		} catch (FileNotFoundException e) {
 			// should never happen since we test existence before
-			logger.warn("Destination path not found: {}", e.getMessage());
-			return;
+			logger.warn(e.getMessage());
+			throw new ClientException(e.getMessage());
 		} catch (IOException e) {
 			logger.error("Error writing file: {}", e.getMessage());
-			return;
+			throw new ClientException(e.getMessage());
 		}
 
 		logger.info("Download successful", filename, destinationPath);
+	}
+
+	/**
+	 * Attemps to upload a file to the server
+	 * @param args
+	 */
+	public void upload(List<String> args) throws InterruptedException, ClientException {
+		if (!isLoggedIn) {
+			logger.info("Not logged in");
+			return;
+		}
+
+		final File file = new File(args.get(0));
+		final CountDownLatch finishLatch = new CountDownLatch(1);
+		BufferedInputStream reader = null;
+
+		StreamObserver<UploadResponse> responseObserver = new StreamObserver<UploadResponse>() {
+			@Override
+			public void onNext(UploadResponse response) {
+				logger.info("Reponse for file upload '{}' received", file.getPath());
+			}
+
+			@Override
+			public void onError(Throwable t) {
+				logger.warn("Error uploading file to server", t.getMessage());
+				finishLatch.countDown();
+			}
+
+			@Override
+			public void onCompleted() {
+				logger.info("Finished uploading file '{}'", file.getPath());
+				finishLatch.countDown();
+			}
+		};
+
+		try {
+			reader = new BufferedInputStream(new FileInputStream(file));
+		} catch (FileNotFoundException e) {
+			logger.error("File not found: {}", e.getMessage());
+			throw new ClientException(e.getMessage());
+		}
+
+		StreamObserver<UploadData> requestObserver = uploadStub.upload(responseObserver);
+
+		byte[] buffer = new byte[BUFFER_SIZE];
+		int read;
+
+		logger.info("Started uploading file '{}'", file.getPath());
+
+		Credentials creds = Credentials.newBuilder()
+			.setUsername(this.username)
+			.setPassword(this.passwordHash)
+			.build();
+
+		try {
+			while ((read = reader.read(buffer)) != -1) {
+				requestObserver.onNext(UploadData.newBuilder()
+					.setCredentials(creds)
+					.setFilename(file.getName())
+					.setContent(ByteString.copyFrom(buffer, 0, read))
+					.build()
+				);
+				// RPC completed or errored before sending finished
+				if (finishLatch.getCount() == 0) {
+					reader.close();
+					return;
+				}
+			}
+			reader.close();
+		} catch (IOException e) {
+			logger.error("Could not read file", e);
+			requestObserver.onError(e);
+			throw new ClientException(e.getMessage());
+		} catch (StatusRuntimeException e) {
+			requestObserver.onError(e);
+			throw new ClientException("Upload failed: " + e.getMessage());
+		}
+
+		requestObserver.onCompleted();
+
+		// response is received asynchronously
+		finishLatch.await();
 	}
 }
