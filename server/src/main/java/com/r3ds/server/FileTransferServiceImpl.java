@@ -111,6 +111,15 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			@Override
 			public void onError(Throwable t) {
 				logger.error("Encountered error during upload", t);
+				if (writer != null) {
+					try {
+						writer.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					} finally {
+						writer = null;
+					}
+				}
 			}
 
 			@Override
