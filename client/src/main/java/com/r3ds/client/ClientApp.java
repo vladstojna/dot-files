@@ -20,6 +20,14 @@ public class ClientApp
 		return true;
 	}
 
+	private static boolean parseOneArgumentCommand(List<String> args) {
+		if (args.size() != 1) {
+			System.out.println("Unknown command, use 'help' to get a list of commands");
+			return false;
+		}
+		return true;
+	}
+
 	private static void printHelp() {
 		System.out.println();
 		System.out.println("Available commands:");
@@ -65,62 +73,78 @@ public class ClientApp
 			System.out.println("No console found");
 			System.exit(1);
 		}
-		while (toExit == false) {
-			String input = console.readLine("%n>>> ").toLowerCase();
-			List<String> arguments = new ArrayList<>(Arrays.asList(input.split("\\s+")));
-			String command = arguments.get(0);
-			arguments.remove(0);
+		try {
+			while (toExit == false) {
+				String input = console.readLine("%n>>> ").toLowerCase();
+				List<String> arguments = new ArrayList<>(Arrays.asList(input.split("\\s+")));
+				String command = arguments.get(0);
+				arguments.remove(0);
 
-			String username;
-			char[] password;
+				String username;
+				char[] password;
 
-			try {
-				switch (command) {
-					case "exit":
-						if (parseEmptyCommand(arguments))
-							toExit = true;
-						break;
-					case "help":
-						if (parseEmptyCommand(arguments))
-							printHelp();
-						break;
-
-					case "signup":
-						if (!parseEmptyCommand(arguments))
+				try {
+					switch (command) {
+						case "exit":
+							if (parseEmptyCommand(arguments))
+								toExit = true;
 							break;
-						username = console.readLine("Username: ");
-						password = console.readPassword("Password: ");
-						char[] passwordAgain = console.readPassword("Repeat password: ");
-						if (Arrays.equals(password, passwordAgain)) {
-							client.signup(username, password);
-						} else {
-							System.out.println("Passwords do not match!");
-						}
-						// clear the passwords
-						Arrays.fill(password, '\0');
-						Arrays.fill(passwordAgain, '\0');
-						break;
-
-					case "login":
-						if (!parseEmptyCommand(arguments))
+						case "help":
+							if (parseEmptyCommand(arguments))
+								printHelp();
 							break;
-						username = console.readLine("Username: ");
-						password = console.readPassword("Password: ");
-						client.login(username, password);
-						Arrays.fill(password, '\0');
-						break;
 
-					default:
-						System.out.println("Unknown command, use 'help' to get a list of commands");
+						case "signup":
+							if (!parseEmptyCommand(arguments))
+								break;
+							username = console.readLine("Username: ");
+							password = console.readPassword("Password: ");
+							char[] passwordAgain = console.readPassword("Repeat password: ");
+							if (Arrays.equals(password, passwordAgain)) {
+								client.signup(username, password);
+							} else {
+								System.out.println("Passwords do not match!");
+							}
+							// clear the passwords
+							Arrays.fill(password, '\0');
+							Arrays.fill(passwordAgain, '\0');
+							break;
+
+						case "login":
+							if (!parseEmptyCommand(arguments))
+								break;
+							username = console.readLine("Username: ");
+							password = console.readPassword("Password: ");
+							client.login(username, password);
+							Arrays.fill(password, '\0');
+							break;
+
+						case "logout":
+							if (parseEmptyCommand(arguments))
+								client.logout();
+							break;
+
+						case "download":
+							if (parseOneArgumentCommand(arguments))
+								client.download(arguments.get(0));
+							break;
+
+						case "upload":
+							if (parseOneArgumentCommand(arguments))
+								client.upload(arguments.get(0));
+							break;
+
+						default:
+							System.out.println("Unknown command, use 'help' to get a list of commands");
+					}
+				} catch (ClientException e) {
+					System.out.println(e.getMessage());
 				}
-			} catch (ClientException e) {
-				System.out.println(e.getMessage());
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				client.shutdown();
 			}
-			
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			client.shutdown();
 		}
 	}
 }
