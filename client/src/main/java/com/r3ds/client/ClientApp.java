@@ -1,18 +1,41 @@
 package com.r3ds.client;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.io.Console;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import com.r3ds.client.exception.ClientException;
 
 /**
  * Client app
  */
 public class ClientApp
 {
+	private static boolean parseEmptyCommand(List<String> args) {
+		if (!args.isEmpty()) {
+			System.out.println("Unknown command, use 'help' to get a list of commands");
+			return false;
+		}
+		return true;
+	}
+
+	private static void printHelp() {
+		System.out.println();
+		System.out.println("Available commands:");
+		System.out.printf("%-10s %s%n", "help", "print this message");
+		System.out.printf("%-10s %s%n", "exit", "exits the application");
+		System.out.println();
+
+		System.out.printf("%-10s %s%n", "signup", "begins interactive signup");
+		System.out.printf("%-10s %s%n", "login", "begins interactive login");
+		System.out.println();
+
+		System.out.printf("%-8s %-15s %s%n", "download", "[filename]", "downloads file with name 'filename' from server");
+		System.out.printf("%-8s %-15s %s%n", "upload", "[filename]", "uploads file with name 'filename' to server");
+		System.out.printf("%-8s %-15s %s%n", "add", "[filename]", "starts tracking file in 'localpath'");
+	}
+
 	public static void main(String[] args) throws Exception
 	{
 		System.out.println(ClientApp.class.getSimpleName());
@@ -30,37 +53,74 @@ public class ClientApp
 
 		try {
 			client.ping("hello server");
-			String input;
-			List<String> inputArgs = null;
-			String methodName;
-
-			System.out.print("\n>>> ");
-			System.out.flush();
-			
-			BufferedReader buffer = new BufferedReader(new InputStreamReader(System.in));
-			while (!(input = buffer.readLine().toLowerCase()).equals("exit")) {
-				inputArgs = new ArrayList<>(Arrays.asList(input.split("\\s+")));
-				methodName = inputArgs.get(0);
-				inputArgs.remove(0);
-				
-				try {
-					// Reflection - in this case, discover what method has to call
-					Method method = client.getClass().getDeclaredMethod(methodName, List.class);
-					// call the found method in client object with the given args
-					method.invoke(client, inputArgs);
-				} catch (SecurityException | NoSuchMethodException e) {
-					e.printStackTrace();
-					System.out.println(e.getMessage());
-				} catch (IllegalArgumentException | IllegalAccessException | InvocationTargetException e) {
-					// it should not be get here since all methods will receive a list of strings as argument
-					e.printStackTrace();
-					System.out.println(e.getMessage());
-				}
-				System.out.print("\n>>> ");
-				System.out.flush();
-			}
-		} finally {
+		} catch (ClientException e) {
+			e.printStackTrace();
 			client.shutdown();
+			System.exit(1);
+		}
+
+		boolean toExit = false;
+		Console console = System.console();
+		if (console == null) {
+			System.out.println("No console found");
+			System.exit(1);
+		}
+		while (toExit == false) {
+			String input = console.readLine("%n>>> ").toLowerCase();
+			List<String> arguments = new ArrayList<>(Arrays.asList(input.split("\\s+")));
+			String command = arguments.get(0);
+			arguments.remove(0);
+
+			String username;
+			char[] password;
+
+			try {
+				switch (command) {
+					case "exit":
+						if (parseEmptyCommand(arguments))
+							toExit = true;
+						break;
+					case "help":
+						if (parseEmptyCommand(arguments))
+							printHelp();
+						break;
+
+					case "signup":
+						if (!parseEmptyCommand(arguments))
+							break;
+						username = console.readLine("Username: ");
+						password = console.readPassword("Password: ");
+						char[] passwordAgain = console.readPassword("Repeat password: ");
+						if (Arrays.equals(password, passwordAgain)) {
+							client.signup(username, password);
+						} else {
+							System.out.println("Passwords do not match!");
+						}
+						// clear the passwords
+						Arrays.fill(password, '\0');
+						Arrays.fill(passwordAgain, '\0');
+						break;
+
+					case "login":
+						if (!parseEmptyCommand(arguments))
+							break;
+						username = console.readLine("Username: ");
+						password = console.readPassword("Password: ");
+						client.login(username, password);
+						Arrays.fill(password, '\0');
+						break;
+
+					default:
+						System.out.println("Unknown command, use 'help' to get a list of commands");
+				}
+			} catch (ClientException e) {
+				System.out.println(e.getMessage());
+			} catch (Exception e) {
+				e.printStackTrace();
+			} finally {
+				client.shutdown();
+			}
+			
 		}
 	}
 }
