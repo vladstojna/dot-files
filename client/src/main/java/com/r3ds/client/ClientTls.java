@@ -28,14 +28,16 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -59,7 +61,8 @@ public class ClientTls {
 	private final FileTransferServiceGrpc.FileTransferServiceBlockingStub downloadBlockingStub;
 	private final FileTransferServiceGrpc.FileTransferServiceStub uploadStub;
 
-	private static final int BUFFER_SIZE = 16 * 1024;
+	private int BUFFER_SIZE;
+	private Path SYSTEM_PATH;
 
 	// this users unique symmetric key used to cipher their documents
 	private SecretKey symmetricKey;
@@ -72,6 +75,12 @@ public class ClientTls {
 
 	private CryptoTools cryptoHelper;
 
+	/**
+	 * Builds SSL context
+	 * @param trustCertCollectionFilePath
+	 * @return SSL context
+	 * @throws SSLException if unable to build SSL context
+	 */
 	private static SslContext getSslContext(String trustCertCollectionFilePath) throws SSLException {
 		return SslContextBuilder
 			.forClient()
@@ -84,6 +93,14 @@ public class ClientTls {
 			.trustManager(new File(trustCertCollectionFilePath)).build();
 	}
 
+	/**
+	 * Constructor for client
+	 * @param host
+	 * @param port
+	 * @param trustCertCollectionFilePath
+	 * @throws SSLException if unable to build SSL context
+	 * @throws ClientException
+	 */
 	public ClientTls(String host, int port, String trustCertCollectionFilePath) throws SSLException, ClientException {
 		this(NettyChannelBuilder
 			.forAddress(host, port)
@@ -91,6 +108,11 @@ public class ClientTls {
 			.build());
 	}
 
+	/**
+	 * Constructor for client
+	 * @param channel
+	 * @throws ClientException
+	 */
 	private ClientTls(ManagedChannel channel) throws ClientException {
 		this.channel = channel;
 		this.blockingStub = PingServiceGrpc.newBlockingStub(channel);
@@ -99,14 +121,40 @@ public class ClientTls {
 		this.uploadStub = FileTransferServiceGrpc.newStub(channel);
 		this.cryptoHelper = new CryptoTools();
 		setLoggedOut();
+		loadConfig();
 	}
 
+	/**
+	 * Loads config.properties
+	 * @throws ClientException when resource does not exist or is unable to load a resource
+	 */
+	private void loadConfig() throws ClientException {
+		try {
+			String rsrcName = "config.properties";
+			InputStream input = ClientTls.class.getClassLoader().getResourceAsStream(rsrcName);
+			if (input == null)
+				throw new ClientException(String.format("Could not find resource '%s'", rsrcName));
+			Properties prop = new Properties();
+			prop.load(input);
+			BUFFER_SIZE = Integer.parseInt(prop.getProperty("buffer.size"));
+			SYSTEM_PATH = Paths.get(System.getProperty("user.home"), prop.getProperty("r3ds.path"));
+		} catch (IOException e) {
+			throw new ClientException(String.format("Could not load properties: %s", e.getMessage()));
+		}
+	}
+
+	/**
+	 * Shuts down client
+	 * @throws InterruptedException
+	 */
 	public void shutdown() throws InterruptedException {
 		channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
 	}
 
 	/**
-	 * Say hello to server.
+	 * Ping server
+	 * @param message
+	 * @throws ClientException
 	 */
 	public void ping(String message) throws ClientException {
 		logger.info("Request: {}", message);
@@ -122,9 +170,10 @@ public class ClientTls {
 	}
 	
 	/**
-	 * Creates a new user in the server
-	 *
-	 * @param args
+	 * Signs up the client
+	 * @param username
+	 * @param password
+	 * @throws ClientException when signup is unsucessful or if a user is logged in
 	 */
 	public void signup(String username, char[] password) throws ClientException {
 		if (isLoggedIn)
@@ -148,7 +197,6 @@ public class ClientTls {
 
 	/**
 	 * Updates state so that client is logged in
-	 *
 	 * @param username
 	 * @param pw
 	 * @param key
@@ -162,6 +210,7 @@ public class ClientTls {
 
 	/**
 	 * Updates state so that nobody is logged in
+	 * @throws ClientException when destruction of key is unsuccessful
 	 */
 	private void setLoggedOut() throws ClientException {
 		try {
@@ -178,11 +227,12 @@ public class ClientTls {
 		}
 		
 	}
-	
+
 	/**
-	 * Authenticates a user in the server
-	 *
-	 * @param args
+	 * Authenticates a user on the server
+	 * @param username
+	 * @param password
+	 * @throws ClientException when authentication fails or a user is logged in
 	 */
 	public void login(String username, char[] password) throws ClientException {
 		if (isLoggedIn)
@@ -212,7 +262,8 @@ public class ClientTls {
 	}
 	
 	/**
-	 * Removes the client authentication (from client side app)
+	 * Logs a user out
+	 * @throws ClientException when the user is already logged out
 	 */
 	public void logout() throws ClientException {
 		if (!isLoggedIn)
@@ -224,120 +275,110 @@ public class ClientTls {
 	}
 
 	/**
-	 * Requests to download file from server
-	 *
-	 * @param args
+	 * Attempt to download a file
+	 * @param filename name of file to download
+	 * @throws ClientException if user is not logged in or download failed
 	 */
-	public void download(List<String> args) throws ClientException {
-		if (!isLoggedIn) {
-			logger.info("Not logged in");
-			return;
-		}
+	public void download(String filename) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
 
-		String filename = args.get(0);
-		String destinationPath = args.get(1);
-
-		logger.info("Request: download file '{}' to '{}'", filename, destinationPath);
-
-		DownloadRequest request = DownloadRequest.newBuilder()
-			.setCredentials(
-				Credentials.newBuilder()
-					.setUsername(this.username)
-					.setPassword(this.passwordHash))
-			.setFilename(filename)
-			.build();
-
-		File file = new File(destinationPath);
-
-		// if destination is directory then append filename to destination
-		if (file.isDirectory()) {
-			file = Paths.get(destinationPath, filename).toFile();
-		} else if (file.getParentFile() != null && !file.getParentFile().isDirectory()) {
-			logger.warn("{} (no such file or directory)}", destinationPath);
-			throw new ClientException(destinationPath + "(no such file or directory)");
-		}
-
-		Iterator<Chunk> content;
 		try {
-			content = downloadBlockingStub.download(request);
-			BufferedOutputStream writer = new BufferedOutputStream(new FileOutputStream(file));
+
+			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			// first time downloading user-wide
+			if (!Files.isDirectory(userPath)) {
+				logger.info("Directory for user '{}' does not exist, creating one", "def");
+				Files.deleteIfExists(userPath);
+				Files.createDirectories(userPath);
+			}
+
+			logger.info("Request: download file '{}' to '{}'", filename, userPath);
+
+			DownloadRequest request = DownloadRequest.newBuilder()
+				.setCredentials(
+					Credentials.newBuilder()
+						.setUsername(this.username)
+						.setPassword(this.passwordHash))
+				.setFilename(filename)
+				.build();
+
+			Iterator<Chunk> content = downloadBlockingStub.download(request);
+
+			File destinationPath = Paths.get(userPath.toString(), filename).toFile();
+			BufferedOutputStream writer = new BufferedOutputStream(new FileOutputStream(destinationPath));
 			while (content.hasNext()) {
 				writer.write(content.next().getContent().toByteArray());
 			}
 			writer.flush();
 			writer.close();
+
+			logger.info("Download of '{}' to '{}' successful", filename, userPath);
+
 		} catch (StatusRuntimeException e) {
 			logger.warn("Download failed: {}", e.getMessage());
 			throw new ClientException("Download failed: " + e.getMessage());
-		} catch (FileNotFoundException e) {
-			// should never happen since we test existence before
-			logger.warn(e.getMessage());
-			throw new ClientException(e.getMessage());
 		} catch (IOException e) {
-			logger.error("Error writing file: {}", e.getMessage());
+			logger.error("Error downloading file", e);
 			throw new ClientException(e.getMessage());
 		}
-
-		logger.info("Download successful", filename, destinationPath);
 	}
 
 	/**
-	 * Attemps to upload a file to the server
-	 * @param args
+	 * Attemps to upload a file
+	 * @param filename
+	 * @throws InterruptedException
+	 * @throws ClientException if user is not logged in or upload failed
 	 */
-	public void upload(List<String> args) throws InterruptedException, ClientException {
-		if (!isLoggedIn) {
-			logger.info("Not logged in");
-			return;
-		}
+	public void upload(String filename) throws InterruptedException, ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
 
-		final File file = new File(args.get(0));
+		// check if file with said name exists as regular file
+		Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+		Path filePath = Paths.get(userPath.toString(), filename);
+		if (!Files.isRegularFile(filePath))
+			throw new ClientException(String.format("%s does not exist or is not a file", filePath));
+
 		final CountDownLatch finishLatch = new CountDownLatch(1);
-		BufferedInputStream reader = null;
 
 		StreamObserver<UploadResponse> responseObserver = new StreamObserver<UploadResponse>() {
 			@Override
 			public void onNext(UploadResponse response) {
-				logger.info("Reponse for file upload '{}' received", file.getPath());
+				logger.info("Reponse for file upload '{}' received", filePath);
 			}
 
 			@Override
 			public void onError(Throwable t) {
-				logger.warn("Error uploading file to server", t.getMessage());
+				logger.warn("Error uploading file to server: {}", t.getMessage());
 				finishLatch.countDown();
 			}
 
 			@Override
 			public void onCompleted() {
-				logger.info("Finished uploading file '{}'", file.getPath());
+				logger.info("Finished uploading file '{}'", filePath);
 				finishLatch.countDown();
 			}
 		};
 
-		try {
-			reader = new BufferedInputStream(new FileInputStream(file));
-		} catch (FileNotFoundException e) {
-			logger.error("File not found: {}", e.getMessage());
-			throw new ClientException(e.getMessage());
-		}
-
 		StreamObserver<UploadData> requestObserver = uploadStub.upload(responseObserver);
 
-		byte[] buffer = new byte[BUFFER_SIZE];
-		int read;
-
-		logger.info("Started uploading file '{}'", file.getPath());
-
-		Credentials creds = Credentials.newBuilder()
-			.setUsername(this.username)
-			.setPassword(this.passwordHash)
-			.build();
-
 		try {
+			BufferedInputStream reader = new BufferedInputStream(new FileInputStream(filePath.toFile()));
+			byte[] buffer = new byte[BUFFER_SIZE];
+			int read;
+
+			logger.info("Started uploading file '{}'", filePath);
+
+			Credentials creds = Credentials.newBuilder()
+				.setUsername(this.username)
+				.setPassword(this.passwordHash)
+				.build();
+
 			while ((read = reader.read(buffer)) != -1) {
 				requestObserver.onNext(UploadData.newBuilder()
 					.setCredentials(creds)
-					.setFilename(file.getName())
+					.setFilename(filePath.toFile().getName())
 					.setContent(ByteString.copyFrom(buffer, 0, read))
 					.build()
 				);
@@ -349,12 +390,13 @@ public class ClientTls {
 			}
 			reader.close();
 		} catch (IOException e) {
-			logger.error("Could not read file", e);
+			logger.error("Could not read file: {}", e.getMessage());
 			requestObserver.onError(e);
 			throw new ClientException(e.getMessage());
 		} catch (StatusRuntimeException e) {
+			logger.warn("Upload failed: {}", e.getMessage());
 			requestObserver.onError(e);
-			throw new ClientException("Upload failed: " + e.getMessage());
+			throw new ClientException(String.format("Upload failed: %s", e.getMessage()));
 		}
 
 		requestObserver.onCompleted();
