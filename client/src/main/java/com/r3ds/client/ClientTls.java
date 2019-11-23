@@ -1,6 +1,5 @@
 package com.r3ds.client;
 
-import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import com.google.protobuf.ByteString;
 
@@ -32,19 +31,17 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
-import java.security.Key;
-import java.security.NoSuchAlgorithmException;
-import java.security.spec.InvalidKeySpecException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.SecretKey;
 import javax.net.ssl.SSLException;
+import javax.security.auth.DestroyFailedException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,25 +59,18 @@ public class ClientTls {
 	private final FileTransferServiceGrpc.FileTransferServiceBlockingStub downloadBlockingStub;
 	private final FileTransferServiceGrpc.FileTransferServiceStub uploadStub;
 
-	// PBEKeySpec does not permit an empty salt
-	// Sadly we cannot use a random salt due to the key being generated
-	// for the same account multiple times (e.g. per startup)
-	private final String keyDerivationAlgo = "PBKDF2WithHmacSHA512";
-	private final int iterations = 1024;
-	private final int keyLen = 256;
-
-	private final String encryptionAlgo = "AES_256";
-
-	private final int BUFFER_SIZE = 4096;
+	private static final int BUFFER_SIZE = 16 * 1024;
 
 	// this users unique symmetric key used to cipher their documents
-	private Key symmetricKey;
+	private SecretKey symmetricKey;
 
 	// username and password hash are stored for further authentication
 	private String username;
 	private String passwordHash;
 
 	private boolean isLoggedIn;
+
+	private CryptoTools cryptoHelper;
 
 	private static SslContext getSslContext(String trustCertCollectionFilePath) throws SSLException {
 		return SslContextBuilder
@@ -94,40 +84,20 @@ public class ClientTls {
 			.trustManager(new File(trustCertCollectionFilePath)).build();
 	}
 
-	private static Key deriveKey(char[] pw, byte[] salt, int iterations, int keyLen, String kdAlgo) {
-		PBEKeySpec spec = new PBEKeySpec(pw, salt, iterations, keyLen);
-		try {
-			SecretKeyFactory kf = SecretKeyFactory.getInstance(kdAlgo);
-			Key key = kf.generateSecret(spec);
-			return key;
-		} catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-			throw new AssertionError("Error deriving key", e);
-		} finally {
-			spec.clearPassword();
-		}
-	}
-
-	private Key deriveKey(String password, String username) {
-		return deriveKey(password.toCharArray(), hash(username).asBytes(), iterations, keyLen, keyDerivationAlgo);
-	}
-
-	private HashCode hash(String text) {
-		return Hashing.sha256().hashString(text, StandardCharsets.UTF_8);
-	}
-
-	public ClientTls(String host, int port, String trustCertCollectionFilePath) throws SSLException {
+	public ClientTls(String host, int port, String trustCertCollectionFilePath) throws SSLException, ClientException {
 		this(NettyChannelBuilder
 			.forAddress(host, port)
 			.sslContext(getSslContext(trustCertCollectionFilePath))
 			.build());
 	}
 
-	private ClientTls(ManagedChannel channel) {
+	private ClientTls(ManagedChannel channel) throws ClientException {
 		this.channel = channel;
 		this.blockingStub = PingServiceGrpc.newBlockingStub(channel);
 		this.authBlockingStub = AuthServiceGrpc.newBlockingStub(channel);
 		this.downloadBlockingStub = FileTransferServiceGrpc.newBlockingStub(channel);
 		this.uploadStub = FileTransferServiceGrpc.newStub(channel);
+		this.cryptoHelper = new CryptoTools();
 		setLoggedOut();
 	}
 
@@ -138,7 +108,7 @@ public class ClientTls {
 	/**
 	 * Say hello to server.
 	 */
-	public void ping(String message) {
+	public void ping(String message) throws ClientException {
 		logger.info("Request: {}", message);
 		PingRequest request = PingRequest.newBuilder().setMessage(message).build();
 		PingResponse response;
@@ -146,7 +116,7 @@ public class ClientTls {
 			response = blockingStub.ping(request);
 		} catch (StatusRuntimeException e) {
 			logger.warn("RPC failed: {}", e.getStatus());
-			return;
+			throw new ClientException(e.getMessage());
 		}
 		logger.info("Response: {}", response.getMessage());
 	}
@@ -156,24 +126,22 @@ public class ClientTls {
 	 *
 	 * @param args
 	 */
-	public void signup(List<String> args) {
-		if (isLoggedIn) {
-			logger.info("Logged in as {}, logout first", this.username);
-			return;
-		}
+	public void signup(String username, char[] password) throws ClientException {
+		if (isLoggedIn)
+			throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
 
-		String username = args.get(0);
-		String password = hash(args.get(1)).toString();
-		logger.info("Request: Signup with username '{}' and password '{}'", username, password);
+		logger.info("Request: Signup with username '{}'", username);
 		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
-				.setPassword(password)
+				.setPassword(Hashing.sha256()
+					.hashString(CharBuffer.wrap(password) , StandardCharsets.UTF_8)
+					.toString())
 				.build();
 		try {
 			authBlockingStub.signup(request);
 		} catch (StatusRuntimeException e) {
 			logger.warn("Signup failed: {}", e.getMessage());
-			return;
+			throw new ClientException(e.getMessage());
 		}
 		logger.info("Signup successful");
 	}
@@ -185,7 +153,7 @@ public class ClientTls {
 	 * @param pw
 	 * @param key
 	 */
-	private void setLoggedIn(String username, String pw, Key key) {
+	private void setLoggedIn(String username, String pw, SecretKey key) {
 		this.username = username;
 		this.passwordHash = pw;
 		this.symmetricKey = key;
@@ -195,11 +163,20 @@ public class ClientTls {
 	/**
 	 * Updates state so that nobody is logged in
 	 */
-	private void setLoggedOut() {
-		this.username = null;
-		this.symmetricKey = null;
-		this.passwordHash = null;
-		this.isLoggedIn = false;
+	private void setLoggedOut() throws ClientException {
+		try {
+			if (this.symmetricKey != null) {
+				this.symmetricKey.destroy();
+				if (this.symmetricKey.isDestroyed())
+					this.symmetricKey = null;
+			}
+			this.username = null;
+			this.passwordHash = null;
+			this.isLoggedIn = false;
+		} catch (DestroyFailedException e) {
+			throw new ClientException(e.getMessage());
+		}
+		
 	}
 	
 	/**
@@ -207,16 +184,19 @@ public class ClientTls {
 	 *
 	 * @param args
 	 */
-	public void login(List<String> args) {
-		if (isLoggedIn) {
-			logger.info("Logged in as {}", this.username);
-			return;
-		}
+	public void login(String username, char[] password) throws ClientException {
+		if (isLoggedIn)
+			throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
 
-		String username = args.get(0);
-		String realPassword = args.get(1);
-		String passwordToServer = hash(realPassword).toString();
-		logger.info("Request: Login with username '{}' and password '{}'", username, passwordToServer);
+		SecretKey key = cryptoHelper.deriveKey(password,
+			Hashing.sha256()
+				.hashString(username, StandardCharsets.UTF_8)
+				.asBytes());
+		String passwordToServer = Hashing.sha256()
+			.hashString(CharBuffer.wrap(password), StandardCharsets.UTF_8)
+			.toString();
+
+		logger.info("Request: Login with username '{}'", username);
 		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
 				.setPassword(passwordToServer)
@@ -225,20 +205,18 @@ public class ClientTls {
 			authBlockingStub.login(request);
 		} catch (StatusRuntimeException e) {
 			logger.warn("Login failed: {}", e.getMessage());
-			return;
+			throw new ClientException(e.getMessage());
 		}
-		setLoggedIn(username, passwordToServer, deriveKey(realPassword, username));
+		setLoggedIn(username, passwordToServer, key);
 		logger.info("Login successful");
 	}
 	
 	/**
 	 * Removes the client authentication (from client side app)
 	 */
-	public void logout() {
-		if (!isLoggedIn) {
-			logger.info("Not logged in");
-			return;
-		}
+	public void logout() throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
 
 		logger.info("Request: Logout with username '{}'", this.username);
 		setLoggedOut();
