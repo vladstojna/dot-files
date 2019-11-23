@@ -279,8 +279,8 @@ public class CryptoTools {
 	 */
 	public byte[] digestFile(String pathToFile) throws FileNotFoundException, IOException {
 		InputStream is = new DigestInputStream(new FileInputStream(pathToFile), getMessageDigest());
-		byte[] buffer = new byte[BUFFER_SIZE];
-		while (is.read(buffer, 0, BUFFER_SIZE) != -1) {
+		byte[] buffer = new byte[getBufferSize()];
+		while (is.read(buffer, 0, getBufferSize()) != -1) {
 			// empty
 		}
 		is.close();
@@ -305,7 +305,7 @@ public class CryptoTools {
 
 			getCipher().init(Cipher.ENCRYPT_MODE, key, genIv());
 
-			byte[] buffer = new byte[BUFFER_SIZE];
+			byte[] buffer = new byte[getBufferSize()];
 			int read;
 
 			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(inPath));
@@ -316,7 +316,7 @@ public class CryptoTools {
 
 			getCipher().init(Cipher.ENCRYPT_MODE, key, genIv());
 			bWriter.write(getCipher().getIV());
-			while ((read = bReader.read(buffer, 0, BUFFER_SIZE)) != -1) {
+			while ((read = bReader.read(buffer, 0, getBufferSize())) != -1) {
 				byte[] cipheredData = getCipher().update(buffer, 0, read);
 				if (cipheredData != null) {
 					bWriter.write(cipheredData);
@@ -353,12 +353,12 @@ public class CryptoTools {
 
 			byte[] existingHash = getCipher().doFinal(readDigest(bReader));
 
-			byte[] buffer = new byte[BUFFER_SIZE];
+			byte[] buffer = new byte[getBufferSize()];
 			byte[] decipheredData;
 			int read;
 
 			getCipher().init(Cipher.DECRYPT_MODE, key, readIv(bReader));
-			while ((read = bReader.read(buffer, 0, BUFFER_SIZE)) != -1) {
+			while ((read = bReader.read(buffer, 0, getBufferSize())) != -1) {
 				decipheredData = getCipher().update(buffer, 0, read);
 				if (decipheredData != null) {
 					bWriter.write(decipheredData);
