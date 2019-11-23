@@ -7,6 +7,9 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.DigestException;
 import java.security.DigestInputStream;
 import java.security.InvalidAlgorithmParameterException;
@@ -24,6 +27,7 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
@@ -245,12 +249,11 @@ public class CryptoTools {
 	 * @param salt
 	 * @return
 	 */
-	public Key deriveKey(char[] pw, byte[] salt) {
+	public SecretKey deriveKey(char[] pw, byte[] salt) {
 		PBEKeySpec spec = new PBEKeySpec(pw, salt, getKdfIterations(), getKeyLen());
 		try {
 			SecretKeyFactory kf = SecretKeyFactory.getInstance(getKdfAlgorithm());
-			Key key = kf.generateSecret(spec);
-			return key;
+			return kf.generateSecret(spec);
 		} catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
 			throw new AssertionError("Error deriving key", e);
 		} finally {
@@ -262,7 +265,7 @@ public class CryptoTools {
 	 * generates a secret key
 	 * @return
 	 */
-	public Key generateKey() {
+	public SecretKey generateKey() {
 		getKeyGenerator().init(getKeyLen());
 		return getKeyGenerator().generateKey();
 	}
@@ -399,6 +402,35 @@ public class CryptoTools {
 		for (byte b : bytes)
 			sb.append(Integer.toHexString((b & 0xFF) | 0x100).substring(1, 3));
 		return sb.toString();
+	}
+
+	/**
+	 * Converts a char array to a byte array
+	 * @param array
+	 * @return
+	 */
+	public static byte[] toBytes(char[] array) {
+		ByteBuffer byteBuffer = StandardCharsets.UTF_8.encode(CharBuffer.wrap(array));
+		byte[] bytes = Arrays.copyOfRange(byteBuffer.array(),
+			byteBuffer.position(), byteBuffer.limit());
+		Arrays.fill(byteBuffer.array(), (byte) 0);
+		return bytes;
+	}
+
+	/**
+	 * Clears a char array
+	 * @param array
+	 */
+	public static void clear(char[] array) {
+		Arrays.fill(array, '\0');
+	}
+
+	/**
+	 * Clears a byte array
+	 * @param array
+	 */
+	public static void clear(byte[] array) {
+		Arrays.fill(array, (byte) 0);;
 	}
 
 }
