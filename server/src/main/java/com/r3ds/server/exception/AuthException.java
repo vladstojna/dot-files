@@ -1,11 +1,9 @@
 package com.r3ds.server.exception;
 
-import io.grpc.Status;
-
 public class AuthException extends Exception {
-	
-	Status status;
-	
+
+	private static final long serialVersionUID = 1L;
+
 	/**
 	 * @param message
 	 */
