@@ -468,8 +468,10 @@ public class ClientTls {
 			throw new ClientException(String.format("%s does not exist or is not a file", filePath));
 
 		try {
-			String outPath = Paths.get(userPath.toString(), "_" + filename).toString();
-			cryptoHelper.decrypt(filePath.toString(), outPath, this.symmetricKey);
+			Path outPath = Paths.get(userPath.toString(), filename + "_");
+			cryptoHelper.decrypt(filePath.toString(), outPath.toString(), this.symmetricKey);
+			Files.move(outPath, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			logger.info("Successfully decrypted file '{}'", filename);
 		} catch (FileNotFoundException e) {
 			logger.warn(e.getMessage());
 			throw new ClientException(e.getMessage());
