@@ -11,6 +11,25 @@ import java.sql.SQLException;
 
 public class AuthTools {
 	
+	public static boolean signup(Connection conn, String username, String password) throws AuthException {
+		try {
+			PreparedStatement stmt = conn.prepareStatement("INSERT INTO user(username, password) VALUES (?, ?)");
+			stmt.setString(1, username);
+			stmt.setString(2, BCrypt.hashpw(password, BCrypt.gensalt()));
+			stmt.executeUpdate();
+			stmt.close();
+		} catch (SQLException e) {
+			if (e.getSQLState().equals("23000")) {
+				return false;
+			} else {
+				throw new AuthException("There was an error with database");
+			}
+		} finally {
+			Database.closeConnection(conn);
+		}
+		return true;
+	}
+	
 	public static void login(Connection conn, String username, String password) throws AuthException {
 		try {
 			conn = Database.getConnection();
