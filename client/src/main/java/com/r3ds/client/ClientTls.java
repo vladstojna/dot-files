@@ -53,6 +53,18 @@ import javax.net.ssl.SSLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/** TODO:
+ * - list remote files
+ * - better exception handling when closing all files, e.g.
+ *     if file is manually deleted before closing all, then program won't exit
+ *     because exception saying said file does not exist will be thrown
+ * - when opening file that does not exist, download it
+ * - when closing file, upload it
+ * - delete-local & delete commands
+ * - some code cleanup may be necessary
+ * - password length, special characters and numbers verification
+ */
+
 /**
  * A simple client that requests a greeting from the {@link HelloWorldServerTls}
  * with TLS.
@@ -173,7 +185,6 @@ public class ClientTls {
 		});
 	}
 
-	// TODO: check special characters, numbers and length
 	private void checkPassword(char[] password) throws ClientException {
 		if (password.length < 1) // placeholder, for testing
 			throw new ClientException("Password length must be at least 1 character");
@@ -192,10 +203,8 @@ public class ClientTls {
 	 * @throws ClientException
 	 */
 	public void exit() throws ClientException {
-		logger.info("Exiting...");
 		justCloseAll();
 		setLoggedOut();
-		logger.info("Exit success");
 	}
 
 	/**
@@ -622,5 +631,45 @@ public class ClientTls {
 		if (this.openFiles.isEmpty())
 			throw new ClientException("No open files");
 		justCloseAll();
+	}
+
+	/**
+	 * Lists all client files
+	 * @return formatted string with file information
+	 * @throws ClientException
+	 */
+	public String list() throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+
+		try {
+			StringBuilder sb = new StringBuilder();
+			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			if (Files.isDirectory(userPath)) {
+				sb.append(String.format(
+					"%-30s| %-10s| %-8s| %-30s| %-20s",
+					"Name", "Type", "State", "Modification Date", "Size (bytes)"))
+				.append('\n')
+				.append(new String(new char[106]).replace('\0', '-'));
+				Iterator<Path> it = Files.list(userPath).iterator();
+				while (it.hasNext()) {
+					sb.append('\n');
+					Path next = it.next();
+					String toAppend = String.format(
+						"%-30s| %-10s| %-8s| %-30s| %-20s",
+						next.getFileName().toString(),
+						"LOCAL",
+						this.openFiles.contains(next.getFileName().toString()) ? "OPEN" : "CLOSED",
+						Files.getLastModifiedTime(next),
+						Files.size(next)
+					);
+					sb.append(toAppend);
+				}
+			}
+			return sb.toString();
+		} catch (IOException e) {
+			logger.error("Unable to list files: {}", e);
+			throw new ClientException("Unable to list files: " + e.getMessage());
+		}
 	}
 }
