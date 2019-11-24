@@ -131,6 +131,11 @@ public class ClientApp
 								client.add(arguments.get(0));
 							break;
 
+						case "open":
+							if (parseOneArgumentCommand(arguments))
+								client.open(arguments.get(0));
+							break;
+
 						default:
 							System.out.println("Unknown command, use 'help' to get a list of commands");
 					}

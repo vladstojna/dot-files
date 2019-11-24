@@ -37,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.DigestException;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Properties;
@@ -454,5 +455,30 @@ public class ClientTls {
 		}
 
 		logger.info("Success: add {}", pathName);
+	}
+
+	public void open(String filename) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+
+		// check if file with said name exists as regular file
+		Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+		Path filePath = Paths.get(userPath.toString(), filename);
+		if (!Files.isRegularFile(filePath))
+			throw new ClientException(String.format("%s does not exist or is not a file", filePath));
+
+		try {
+			String outPath = Paths.get(userPath.toString(), "_" + filename).toString();
+			cryptoHelper.decrypt(filePath.toString(), outPath, this.symmetricKey);
+		} catch (FileNotFoundException e) {
+			logger.warn(e.getMessage());
+			throw new ClientException(e.getMessage());
+		} catch (IOException e) {
+			logger.error("Error opening file: ", e.getMessage());
+			throw new ClientException(e.getMessage());
+		} catch (DigestException e) {
+			logger.error("Error opening file: ", e.getMessage());
+			throw new ClientException(e.getMessage());
+		}
 	}
 }
