@@ -28,6 +28,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -288,7 +289,7 @@ public class ClientTls {
 			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
 			// first time downloading user-wide
 			if (!Files.isDirectory(userPath)) {
-				logger.info("Directory for user '{}' does not exist, creating one", "def");
+				logger.info("Directory for user '{}' does not exist, creating one", this.username);
 				Files.deleteIfExists(userPath);
 				Files.createDirectories(userPath);
 			}
@@ -403,5 +404,40 @@ public class ClientTls {
 
 		// response is received asynchronously
 		finishLatch.await();
+	}
+
+	/**
+	 * Adds a local file to the system
+	 * @param pathName path to the local file
+	 * @throws ClientException if user is not logged in, file does not exist or failed adding
+	 */
+	public void add(String pathName) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+
+		Path path = Paths.get(pathName);
+		if (!Files.isRegularFile(path))
+			throw new ClientException(String.format("%s does not exist or is not a file", path));
+
+		try {
+
+			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			if (!Files.isDirectory(userPath)) {
+				logger.info("Directory for user '{}' does not exist, creating one", this.username);
+				Files.deleteIfExists(userPath);
+				Files.createDirectories(userPath);
+			}
+			String outPath = Paths.get(userPath.toString(), path.getFileName().toString()).toString();
+			cryptoHelper.encrypt(pathName, outPath, this.symmetricKey);
+
+		} catch (FileNotFoundException e) {
+			logger.warn(e.getMessage());
+			throw new ClientException(e.getMessage());
+		} catch (IOException e) {
+			logger.error("Error adding file: ", e.getMessage());
+			throw new ClientException(e.getMessage());
+		}
+
+		logger.info("Success: add {}", pathName);
 	}
 }

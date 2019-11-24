@@ -134,6 +134,11 @@ public class ClientApp
 								client.upload(arguments.get(0));
 							break;
 
+						case "add":
+							if (parseOneArgumentCommand(arguments))
+								client.add(arguments.get(0));
+							break;
+
 						default:
 							System.out.println("Unknown command, use 'help' to get a list of commands");
 					}
