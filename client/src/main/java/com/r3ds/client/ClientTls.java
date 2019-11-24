@@ -43,7 +43,6 @@ import java.util.concurrent.TimeUnit;
 
 import javax.crypto.SecretKey;
 import javax.net.ssl.SSLException;
-import javax.security.auth.DestroyFailedException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -212,19 +211,20 @@ public class ClientTls {
 	 * Updates state so that nobody is logged in
 	 * @throws ClientException when destruction of key is unsuccessful
 	 */
-	private void setLoggedOut() throws ClientException {
-		try {
-			if (this.symmetricKey != null) {
-				this.symmetricKey.destroy();
-				if (this.symmetricKey.isDestroyed())
-					this.symmetricKey = null;
-			}
-			this.username = null;
-			this.passwordHash = null;
-			this.isLoggedIn = false;
-		} catch (DestroyFailedException e) {
-			throw new ClientException(e.getMessage());
+	private void setLoggedOut() {
+		// Should destroy the key, but destroy() is not overriden
+		// by a password-derived key?
+		/*
+		if (this.symmetricKey != null) {
+			this.symmetricKey.destroy();
+			if (this.symmetricKey.isDestroyed())
+				this.symmetricKey = null;
 		}
+		*/
+		this.symmetricKey = null;
+		this.username = null;
+		this.passwordHash = null;
+		this.isLoggedIn = false;
 		
 	}
 
