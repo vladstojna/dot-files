@@ -147,7 +147,7 @@ public class ClientApp
 							if (parseOneArgumentCommand(arguments)) {
 								System.out.printf("Uploading %s...%n", arguments.get(0));
 								client.upload(arguments.get(0));
-								System.out.printf("Upload success");
+								System.out.println("Upload success");
 							}
 							break;
 
@@ -155,7 +155,7 @@ public class ClientApp
 							if (parseOneArgumentCommand(arguments)) {
 								System.out.printf("Adding %s...%n", arguments.get(0));
 								client.add(arguments.get(0));
-								System.out.printf("Add succes");
+								System.out.println("Add success");
 							}
 							break;
 
@@ -163,7 +163,7 @@ public class ClientApp
 							if (parseOneArgumentCommand(arguments)) {
 								System.out.printf("Opening %s...%n", arguments.get(0));
 								client.open(arguments.get(0));
-								System.out.printf("Open success", arguments.get(0));
+								System.out.println("Open success");
 							}
 							break;
 
@@ -171,7 +171,7 @@ public class ClientApp
 							if (parseOneArgumentCommand(arguments)) {
 								System.out.printf("Closing %s...%n", arguments.get(0));
 								client.close(arguments.get(0));
-								System.out.printf("Close success", arguments.get(0));
+								System.out.println("Close success");
 							}
 							break;
 
@@ -180,6 +180,14 @@ public class ClientApp
 								System.out.println("Closing all...");
 								client.closeAll();
 								System.out.println("Closeall success");
+							}
+							break;
+
+						case "list":
+							if (parseEmptyCommand(arguments)) {
+								System.out.println("Listing...");
+								System.out.println(client.list());
+								System.out.println("List success");
 							}
 							break;
 
