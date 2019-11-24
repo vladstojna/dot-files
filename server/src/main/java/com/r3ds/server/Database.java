@@ -11,49 +11,49 @@ import java.util.Properties;
 
 public class Database {
 
-    /**
-     * Return a connection to DB
-     *
-     * @return Connection
-     * @throws SQLException
-     */
-    public static Connection getConnection() throws SQLException {
-        try (InputStream input = new FileInputStream(
-                new File(Database.class.getProtectionDomain().getCodeSource().getLocation().getPath()).getParent() +
-                        "/../src/main/resources/database/config.properties"
-        )) {
-            Properties prop = new Properties();
+	/**
+	 * Return a connection to DB
+	 *
+	 * @return Connection
+	 * @throws SQLException
+	 */
+	public static Connection getConnection() throws SQLException {
+		try (InputStream input = new FileInputStream(
+				new File(Database.class.getProtectionDomain().getCodeSource().getLocation().getPath()).getParent() +
+						"/../src/main/resources/database/config.properties"
+		)) {
+			Properties prop = new Properties();
 
-            // load a properties file
-            prop.load(input);
+			// load a properties file
+			prop.load(input);
 
-            // get the property value and print it out
-            String dbName = prop.getProperty("db.name");
-            int dbPort = Integer.parseInt(prop.getProperty("db.port"));
-            String dbUsername = prop.getProperty("db.user");
-            String dbPassword = prop.getProperty("db.pass");
+			// get the property value and print it out
+			String dbName = prop.getProperty("db.name");
+			int dbPort = Integer.parseInt(prop.getProperty("db.port"));
+			String dbUsername = prop.getProperty("db.user");
+			String dbPassword = prop.getProperty("db.pass");
 
-            Class.forName("com.mysql.jdbc.Driver");
-            // TODO: ver como usar certificados na ligacao com a base de dados
-            return DriverManager.getConnection(
-                    "jdbc:mysql://localhost:" + dbPort + "/" + dbName + "?useUnicode=yes&characterEncoding=UTF-8&verifyServerCertificate=false&useSSL=true",
-                    dbUsername,
-                    dbPassword
-            );
-        } catch (IOException | ClassNotFoundException | SQLException e) {
-            System.out.println(e);
-            throw new SQLException("The database connection failed.", e);
-        }
-    }
-    
-    public static void closeConnection(Connection conn) {
-        if (conn != null) {
-            try {
-                conn.close();
-            } catch (SQLException e) {
-                /* ignored */
-                System.out.println("Close failure");
-            }
-        }
-    }
+			Class.forName("com.mysql.jdbc.Driver");
+			// TODO: ver como usar certificados na ligacao com a base de dados
+			return DriverManager.getConnection(
+					"jdbc:mysql://localhost:" + dbPort + "/" + dbName + "?useUnicode=yes&characterEncoding=UTF-8&verifyServerCertificate=false&useSSL=true",
+					dbUsername,
+					dbPassword
+			);
+		} catch (IOException | ClassNotFoundException | SQLException e) {
+			System.out.println(e);
+			throw new SQLException("The database connection failed.", e);
+		}
+	}
+	
+	public static void closeConnection(Connection conn) {
+		if (conn != null) {
+			try {
+				conn.close();
+			} catch (SQLException e) {
+				/* ignored */
+				System.out.println("Close failure");
+			}
+		}
+	}
 }
