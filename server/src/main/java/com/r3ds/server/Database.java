@@ -1,7 +1,5 @@
 package com.r3ds.server;
 
-import com.r3ds.server.exception.DatabaseException;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -17,9 +15,9 @@ public class Database {
      * Return a connection to DB
      *
      * @return Connection
-     * @throws DatabaseException
+     * @throws SQLException
      */
-    public static Connection getConnection() throws DatabaseException {
+    public static Connection getConnection() throws SQLException {
         try (InputStream input = new FileInputStream(
                 new File(Database.class.getProtectionDomain().getCodeSource().getLocation().getPath()).getParent() +
                         "/../src/main/resources/database/config.properties"
@@ -44,7 +42,18 @@ public class Database {
             );
         } catch (IOException | ClassNotFoundException | SQLException e) {
             System.out.println(e);
-            throw new DatabaseException("The database connection failed.", e);
+            throw new SQLException("The database connection failed.", e);
+        }
+    }
+    
+    public static void closeConnection(Connection conn) {
+        if (conn != null) {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                /* ignored */
+                System.out.println("Close failure");
+            }
         }
     }
 }
