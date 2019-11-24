@@ -37,7 +37,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.DigestException;
+import java.security.GeneralSecurityException;
+import java.security.SignatureException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -511,27 +512,40 @@ public class ClientTls {
 		if (!Files.isRegularFile(filePath))
 			throw new ClientException(String.format("%s does not exist or is not a file", filePath));
 
+		Path outPath = null;
 		try {
 
-			if (!openFiles.add(filename)) {
+			if (openFiles.contains(filename)) {
 				throw new ClientException(String.format("File '%s' is already decrypted", filename));
 			}
 
-			Path outPath = Paths.get(userPath.toString(), filename + "_");
+			outPath = Paths.get(userPath.toString(), filename + "_");
 			cryptoHelper.decrypt(filePath.toString(), outPath.toString(), this.symmetricKey);
 			Files.move(outPath, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
+			openFiles.add(filename);
 			logger.info("Successfully decrypted file '{}'", filename);
 
 		} catch (FileNotFoundException e) {
 			logger.warn(e.getMessage());
 			throw new ClientException(e.getMessage());
 		} catch (IOException e) {
-			logger.error("Error opening file: ", e.getMessage());
+			logger.error("Error opening file: {}", e.getMessage());
 			throw new ClientException(e.getMessage());
-		} catch (DigestException e) {
-			logger.error("Error opening file: ", e.getMessage());
-			throw new ClientException(e.getMessage());
+		} catch (SignatureException e) {
+			logger.error("Error opening file: {}", e.getMessage());
+			throw new ClientException("File is corrupted");
+		} catch (GeneralSecurityException e) {
+			logger.error(e.getMessage());
+			throw new ClientException("Error decrypting file: incorrect secret key or file is corrupted");
+		} finally {
+			try {
+				if (outPath != null)
+					Files.deleteIfExists(outPath);
+			} catch (IOException e) {
+				logger.error("Error cleaning up file: {}", e.getMessage());
+				throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
+			}
 		}
 	}
 
@@ -558,14 +572,14 @@ public class ClientTls {
 			logger.warn(e.getMessage());
 			throw new ClientException(e.getMessage());
 		} catch (IOException e) {
-			logger.error("Error closing file: ", e.getMessage());
+			logger.error("Error closing file: {}", e.getMessage());
 			throw new ClientException(e.getMessage());
 		} finally {
 			try {
 				if (outPath != null)
 					Files.deleteIfExists(outPath);
 			} catch (IOException e) {
-				logger.error("Error cleaning up file: ", e.getMessage());
+				logger.error("Error cleaning up file: {}", e.getMessage());
 				throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
 			}
 		}
