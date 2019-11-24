@@ -20,50 +20,29 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
         if (verbose)
             System.out.printf("Signup - create account with username %s%n", request.getUsername());
 
-        Connection conn = null;
         try {
-            conn = Database.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO user(username, password) VALUES (?, ?)");
-            stmt.setString(1, request.getUsername());
-            stmt.setString(2, BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()));
-            stmt.execute();
-        } catch (SQLException e) {
-            if (e.getSQLState().equals("23000")) {
-                System.out.println("Query failed because username already exists"); // TODO: resolver este try
+            if (!AuthTools.signup(Database.getConnection(), request.getUsername(), request.getPassword())) {
                 responseObserver.onError(Status
                         .ALREADY_EXISTS
                         .withDescription("Username already exists.")
-                        .withCause(e)
-                        .asRuntimeException()
-                );
-            } else {
-                System.out.println("Query failed"); // TODO: resolver este try
-                responseObserver.onError(Status
-                        .INTERNAL
-                        .withDescription("Query failed.")
-                        .withCause(e)
+                        .withCause(new AuthException("Username already exists."))
                         .asRuntimeException()
                 );
             }
-            return;
-        } catch (Exception e) {
-            System.out.println("Something unexpected happened"); // TODO: resolver este try
+        } catch (SQLException e) {
             responseObserver.onError(Status
                     .INTERNAL
-                    .withDescription("Something unexpected happened.")
+                    .withDescription("Impossible to authenticate. Please try again.")
                     .withCause(e)
                     .asRuntimeException()
             );
-            return;
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    /* ignored */
-                    System.out.println("Close failure");
-                }
-            }
+        } catch (AuthException e) {
+            responseObserver.onError(Status
+                    .INTERNAL
+                    .withDescription(e.getMessage())
+                    .withCause(e)
+                    .asRuntimeException()
+            );
         }
 
         Auth.SignupResponse response = Auth.SignupResponse.newBuilder()
@@ -79,54 +58,20 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
         if (verbose)
             System.out.printf("Login - verify if exists account with username %s%n", request.getUsername());
     
-        Connection conn = null;
         try {
-            conn = Database.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("SELECT password " +
-                    "FROM user " +
-                    "WHERE username = ?"
-            );
-            stmt.setString(1, request.getUsername());
-            ResultSet rs = stmt.executeQuery();
-            
-            if (!rs.next() || !BCrypt.checkpw(request.getPassword(), rs.getString("password")))
-                throw new AuthException("There are no user with that username and password combination.");
+            AuthTools.login(Database.getConnection(), request.getUsername(), request.getPassword());
         } catch (SQLException e) {
-            System.out.println("There was an error with database");
-            responseObserver.onError(Status
-                    .INTERNAL
-                    .withDescription("Query failed.")
+            e.printStackTrace();
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription("Impossible to authenticate. Please try again.")
                     .withCause(e)
-                    .asRuntimeException()
-            );
-            return;
+                    .asRuntimeException());
         } catch (AuthException e) {
-            System.out.println("User doesn't exist or doesn't have that password"); // TODO: resolver este try
-            responseObserver.onError(Status
-                    .NOT_FOUND
-                    .withDescription("Username and password provided are not a match.")
+            System.out.println("Username and password provided are not a match.");
+            responseObserver.onError(Status.INTERNAL
+                    .withDescription("You are not logged in.")
                     .withCause(e)
-                    .asRuntimeException()
-            );
-            return;
-        } catch (Exception e) {
-            System.out.println("Something unexpected happened"); // TODO: resolver este try
-            responseObserver.onError(Status
-                    .INTERNAL
-                    .withDescription("Something unexpected happened.")
-                    .withCause(e)
-                    .asRuntimeException()
-            );
-            return;
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException e) {
-                    /* ignored */
-                    System.out.println("Close failure");
-                }
-            }
+                    .asRuntimeException());
         }
     
         Auth.LoginResponse response = Auth.LoginResponse.newBuilder()
