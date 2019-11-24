@@ -349,7 +349,7 @@ public class CryptoTools {
 	 * @throws IOException
 	 */
 	public void encrypt(String inPath, String outPath, Key key)
-			throws FileNotFoundException, IOException, GeneralSecurityException {
+			throws FileNotFoundException, IOException {
 		try {
 			byte[] buffer = new byte[getBufferSize()];
 			int read;
@@ -376,6 +376,9 @@ public class CryptoTools {
 			throw new AssertionError("Error initializing cipher", e);
 		} catch (InvalidKeyException e) {
 			throw new AssertionError("Error encrypting file", e);
+		} catch (GeneralSecurityException e) {
+			// should not happen because we are encrypting and padding is requested
+			throw new AssertionError(e.getMessage());
 		}
 	}
 
@@ -397,6 +400,7 @@ public class CryptoTools {
 			byte[] mac = readMac(bReader);
 			IvParameterSpec iv = readIv(bReader);
 			getCipher().init(Cipher.DECRYPT_MODE, key, iv);
+			getMac().init(key);
 
 			byte[] buffer = new byte[getBufferSize()];
 			byte[] decipheredData;
