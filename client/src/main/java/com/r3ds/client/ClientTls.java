@@ -1,6 +1,5 @@
 package com.r3ds.client;
 
-import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import com.google.protobuf.ByteString;
 
@@ -32,18 +31,18 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.Key;
-import java.security.NoSuchAlgorithmException;
-import java.security.spec.InvalidKeySpecException;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.SecretKey;
 import javax.net.ssl.SSLException;
 
 import org.slf4j.Logger;
@@ -62,19 +61,11 @@ public class ClientTls {
 	private final FileTransferServiceGrpc.FileTransferServiceBlockingStub downloadBlockingStub;
 	private final FileTransferServiceGrpc.FileTransferServiceStub uploadStub;
 
-	// PBEKeySpec does not permit an empty salt
-	// Sadly we cannot use a random salt due to the key being generated
-	// for the same account multiple times (e.g. per startup)
-	private final String keyDerivationAlgo = "PBKDF2WithHmacSHA512";
-	private final int iterations = 1024;
-	private final int keyLen = 256;
-
-	private final String encryptionAlgo = "AES_256";
-
-	private final int BUFFER_SIZE = 4096;
+	private int BUFFER_SIZE;
+	private Path SYSTEM_PATH;
 
 	// this users unique symmetric key used to cipher their documents
-	private Key symmetricKey;
+	private SecretKey symmetricKey;
 
 	// username and password hash are stored for further authentication
 	private String username;
@@ -82,6 +73,14 @@ public class ClientTls {
 
 	private boolean isLoggedIn;
 
+	private CryptoTools cryptoHelper;
+
+	/**
+	 * Builds SSL context
+	 * @param trustCertCollectionFilePath
+	 * @return SSL context
+	 * @throws SSLException if unable to build SSL context
+	 */
 	private static SslContext getSslContext(String trustCertCollectionFilePath) throws SSLException {
 		return SslContextBuilder
 			.forClient()
@@ -94,51 +93,70 @@ public class ClientTls {
 			.trustManager(new File(trustCertCollectionFilePath)).build();
 	}
 
-	private static Key deriveKey(char[] pw, byte[] salt, int iterations, int keyLen, String kdAlgo) {
-		PBEKeySpec spec = new PBEKeySpec(pw, salt, iterations, keyLen);
-		try {
-			SecretKeyFactory kf = SecretKeyFactory.getInstance(kdAlgo);
-			Key key = kf.generateSecret(spec);
-			return key;
-		} catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-			throw new AssertionError("Error deriving key", e);
-		} finally {
-			spec.clearPassword();
-		}
-	}
-
-	private Key deriveKey(String password, String username) {
-		return deriveKey(password.toCharArray(), hash(username).asBytes(), iterations, keyLen, keyDerivationAlgo);
-	}
-
-	private HashCode hash(String text) {
-		return Hashing.sha256().hashString(text, StandardCharsets.UTF_8);
-	}
-
-	public ClientTls(String host, int port, String trustCertCollectionFilePath) throws SSLException {
+	/**
+	 * Constructor for client
+	 * @param host
+	 * @param port
+	 * @param trustCertCollectionFilePath
+	 * @throws SSLException if unable to build SSL context
+	 * @throws ClientException
+	 */
+	public ClientTls(String host, int port, String trustCertCollectionFilePath) throws SSLException, ClientException {
 		this(NettyChannelBuilder
 			.forAddress(host, port)
 			.sslContext(getSslContext(trustCertCollectionFilePath))
 			.build());
 	}
 
-	private ClientTls(ManagedChannel channel) {
+	/**
+	 * Constructor for client
+	 * @param channel
+	 * @throws ClientException
+	 */
+	private ClientTls(ManagedChannel channel) throws ClientException {
 		this.channel = channel;
 		this.blockingStub = PingServiceGrpc.newBlockingStub(channel);
 		this.authBlockingStub = AuthServiceGrpc.newBlockingStub(channel);
 		this.downloadBlockingStub = FileTransferServiceGrpc.newBlockingStub(channel);
 		this.uploadStub = FileTransferServiceGrpc.newStub(channel);
+		this.cryptoHelper = new CryptoTools();
 		setLoggedOut();
+		loadConfig();
 	}
 
+	/**
+	 * Loads config.properties
+	 * @throws ClientException when resource does not exist or is unable to load a resource
+	 */
+	private void loadConfig() throws ClientException {
+		try {
+			String rsrcName = "config.properties";
+			InputStream input = ClientTls.class.getClassLoader().getResourceAsStream(rsrcName);
+			if (input == null)
+				throw new ClientException(String.format("Could not find resource '%s'", rsrcName));
+			Properties prop = new Properties();
+			prop.load(input);
+			BUFFER_SIZE = Integer.parseInt(prop.getProperty("buffer.size"));
+			SYSTEM_PATH = Paths.get(System.getProperty("user.home"), prop.getProperty("r3ds.path"));
+		} catch (IOException e) {
+			throw new ClientException(String.format("Could not load properties: %s", e.getMessage()));
+		}
+	}
+
+	/**
+	 * Shuts down client
+	 * @throws InterruptedException
+	 */
 	public void shutdown() throws InterruptedException {
 		channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
 	}
 
 	/**
-	 * Say hello to server.
+	 * Ping server
+	 * @param message
+	 * @throws ClientException
 	 */
-	public void ping(String message) {
+	public void ping(String message) throws ClientException {
 		logger.info("Request: {}", message);
 		PingRequest request = PingRequest.newBuilder().setMessage(message).build();
 		PingResponse response;
@@ -146,46 +164,44 @@ public class ClientTls {
 			response = blockingStub.ping(request);
 		} catch (StatusRuntimeException e) {
 			logger.warn("RPC failed: {}", e.getStatus());
-			return;
+			throw new ClientException(e.getMessage());
 		}
 		logger.info("Response: {}", response.getMessage());
 	}
 	
 	/**
-	 * Creates a new user in the server
-	 *
-	 * @param args
+	 * Signs up the client
+	 * @param username
+	 * @param password
+	 * @throws ClientException when signup is unsucessful or if a user is logged in
 	 */
-	public void signup(List<String> args) {
-		if (isLoggedIn) {
-			logger.info("Logged in as {}, logout first", this.username);
-			return;
-		}
+	public void signup(String username, char[] password) throws ClientException {
+		if (isLoggedIn)
+			throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
 
-		String username = args.get(0);
-		String password = hash(args.get(1)).toString();
-		logger.info("Request: Signup with username '{}' and password '{}'", username, password);
+		logger.info("Request: Signup with username '{}'", username);
 		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
-				.setPassword(password)
+				.setPassword(Hashing.sha256()
+					.hashString(CharBuffer.wrap(password) , StandardCharsets.UTF_8)
+					.toString())
 				.build();
 		try {
 			authBlockingStub.signup(request);
 		} catch (StatusRuntimeException e) {
 			logger.warn("Signup failed: {}", e.getMessage());
-			return;
+			throw new ClientException(e.getMessage());
 		}
 		logger.info("Signup successful");
 	}
 
 	/**
 	 * Updates state so that client is logged in
-	 *
 	 * @param username
 	 * @param pw
 	 * @param key
 	 */
-	private void setLoggedIn(String username, String pw, Key key) {
+	private void setLoggedIn(String username, String pw, SecretKey key) {
 		this.username = username;
 		this.passwordHash = pw;
 		this.symmetricKey = key;
@@ -194,29 +210,44 @@ public class ClientTls {
 
 	/**
 	 * Updates state so that nobody is logged in
+	 * @throws ClientException when destruction of key is unsuccessful
 	 */
 	private void setLoggedOut() {
-		this.username = null;
+		// Should destroy the key, but destroy() is not overriden
+		// by a password-derived key?
+		/*
+		if (this.symmetricKey != null) {
+			this.symmetricKey.destroy();
+			if (this.symmetricKey.isDestroyed())
+				this.symmetricKey = null;
+		}
+		*/
 		this.symmetricKey = null;
+		this.username = null;
 		this.passwordHash = null;
 		this.isLoggedIn = false;
+		
 	}
-	
-	/**
-	 * Authenticates a user in the server
-	 *
-	 * @param args
-	 */
-	public void login(List<String> args) {
-		if (isLoggedIn) {
-			logger.info("Logged in as {}", this.username);
-			return;
-		}
 
-		String username = args.get(0);
-		String realPassword = args.get(1);
-		String passwordToServer = hash(realPassword).toString();
-		logger.info("Request: Login with username '{}' and password '{}'", username, passwordToServer);
+	/**
+	 * Authenticates a user on the server
+	 * @param username
+	 * @param password
+	 * @throws ClientException when authentication fails or a user is logged in
+	 */
+	public void login(String username, char[] password) throws ClientException {
+		if (isLoggedIn)
+			throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
+
+		SecretKey key = cryptoHelper.deriveKey(password,
+			Hashing.sha256()
+				.hashString(username, StandardCharsets.UTF_8)
+				.asBytes());
+		String passwordToServer = Hashing.sha256()
+			.hashString(CharBuffer.wrap(password), StandardCharsets.UTF_8)
+			.toString();
+
+		logger.info("Request: Login with username '{}'", username);
 		Credentials request = Credentials.newBuilder()
 				.setUsername(username)
 				.setPassword(passwordToServer)
@@ -225,20 +256,19 @@ public class ClientTls {
 			authBlockingStub.login(request);
 		} catch (StatusRuntimeException e) {
 			logger.warn("Login failed: {}", e.getMessage());
-			return;
+			throw new ClientException(e.getMessage());
 		}
-		setLoggedIn(username, passwordToServer, deriveKey(realPassword, username));
+		setLoggedIn(username, passwordToServer, key);
 		logger.info("Login successful");
 	}
 	
 	/**
-	 * Removes the client authentication (from client side app)
+	 * Logs a user out
+	 * @throws ClientException when the user is already logged out
 	 */
-	public void logout() {
-		if (!isLoggedIn) {
-			logger.info("Not logged in");
-			return;
-		}
+	public void logout() throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
 
 		logger.info("Request: Logout with username '{}'", this.username);
 		setLoggedOut();
@@ -246,120 +276,110 @@ public class ClientTls {
 	}
 
 	/**
-	 * Requests to download file from server
-	 *
-	 * @param args
+	 * Attempt to download a file
+	 * @param filename name of file to download
+	 * @throws ClientException if user is not logged in or download failed
 	 */
-	public void download(List<String> args) throws ClientException {
-		if (!isLoggedIn) {
-			logger.info("Not logged in");
-			return;
-		}
+	public void download(String filename) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
 
-		String filename = args.get(0);
-		String destinationPath = args.get(1);
-
-		logger.info("Request: download file '{}' to '{}'", filename, destinationPath);
-
-		DownloadRequest request = DownloadRequest.newBuilder()
-			.setCredentials(
-				Credentials.newBuilder()
-					.setUsername(this.username)
-					.setPassword(this.passwordHash))
-			.setFilename(filename)
-			.build();
-
-		File file = new File(destinationPath);
-
-		// if destination is directory then append filename to destination
-		if (file.isDirectory()) {
-			file = Paths.get(destinationPath, filename).toFile();
-		} else if (file.getParentFile() != null && !file.getParentFile().isDirectory()) {
-			logger.warn("{} (no such file or directory)}", destinationPath);
-			throw new ClientException(destinationPath + "(no such file or directory)");
-		}
-
-		Iterator<Chunk> content;
 		try {
-			content = downloadBlockingStub.download(request);
-			BufferedOutputStream writer = new BufferedOutputStream(new FileOutputStream(file));
+
+			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			// first time downloading user-wide
+			if (!Files.isDirectory(userPath)) {
+				logger.info("Directory for user '{}' does not exist, creating one", this.username);
+				Files.deleteIfExists(userPath);
+				Files.createDirectories(userPath);
+			}
+
+			logger.info("Request: download file '{}' to '{}'", filename, userPath);
+
+			DownloadRequest request = DownloadRequest.newBuilder()
+				.setCredentials(
+					Credentials.newBuilder()
+						.setUsername(this.username)
+						.setPassword(this.passwordHash))
+				.setFilename(filename)
+				.build();
+
+			Iterator<Chunk> content = downloadBlockingStub.download(request);
+
+			File destinationPath = Paths.get(userPath.toString(), filename).toFile();
+			BufferedOutputStream writer = new BufferedOutputStream(new FileOutputStream(destinationPath));
 			while (content.hasNext()) {
 				writer.write(content.next().getContent().toByteArray());
 			}
 			writer.flush();
 			writer.close();
+
+			logger.info("Download of '{}' to '{}' successful", filename, userPath);
+
 		} catch (StatusRuntimeException e) {
 			logger.warn("Download failed: {}", e.getMessage());
 			throw new ClientException("Download failed: " + e.getMessage());
-		} catch (FileNotFoundException e) {
-			// should never happen since we test existence before
-			logger.warn(e.getMessage());
-			throw new ClientException(e.getMessage());
 		} catch (IOException e) {
-			logger.error("Error writing file: {}", e.getMessage());
+			logger.error("Error downloading file", e);
 			throw new ClientException(e.getMessage());
 		}
-
-		logger.info("Download successful", filename, destinationPath);
 	}
 
 	/**
-	 * Attemps to upload a file to the server
-	 * @param args
+	 * Attemps to upload a file
+	 * @param filename
+	 * @throws InterruptedException
+	 * @throws ClientException if user is not logged in or upload failed
 	 */
-	public void upload(List<String> args) throws InterruptedException, ClientException {
-		if (!isLoggedIn) {
-			logger.info("Not logged in");
-			return;
-		}
+	public void upload(String filename) throws InterruptedException, ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
 
-		final File file = new File(args.get(0));
+		// check if file with said name exists as regular file
+		Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+		Path filePath = Paths.get(userPath.toString(), filename);
+		if (!Files.isRegularFile(filePath))
+			throw new ClientException(String.format("%s does not exist or is not a file", filePath));
+
 		final CountDownLatch finishLatch = new CountDownLatch(1);
-		BufferedInputStream reader = null;
 
 		StreamObserver<UploadResponse> responseObserver = new StreamObserver<UploadResponse>() {
 			@Override
 			public void onNext(UploadResponse response) {
-				logger.info("Reponse for file upload '{}' received", file.getPath());
+				logger.info("Reponse for file upload '{}' received", filePath);
 			}
 
 			@Override
 			public void onError(Throwable t) {
-				logger.warn("Error uploading file to server", t.getMessage());
+				logger.warn("Error uploading file to server: {}", t.getMessage());
 				finishLatch.countDown();
 			}
 
 			@Override
 			public void onCompleted() {
-				logger.info("Finished uploading file '{}'", file.getPath());
+				logger.info("Finished uploading file '{}'", filePath);
 				finishLatch.countDown();
 			}
 		};
 
-		try {
-			reader = new BufferedInputStream(new FileInputStream(file));
-		} catch (FileNotFoundException e) {
-			logger.error("File not found: {}", e.getMessage());
-			throw new ClientException(e.getMessage());
-		}
-
 		StreamObserver<UploadData> requestObserver = uploadStub.upload(responseObserver);
 
-		byte[] buffer = new byte[BUFFER_SIZE];
-		int read;
-
-		logger.info("Started uploading file '{}'", file.getPath());
-
-		Credentials creds = Credentials.newBuilder()
-			.setUsername(this.username)
-			.setPassword(this.passwordHash)
-			.build();
-
 		try {
+			BufferedInputStream reader = new BufferedInputStream(new FileInputStream(filePath.toFile()));
+			byte[] buffer = new byte[BUFFER_SIZE];
+			int read;
+
+			logger.info("Started uploading file '{}'", filePath);
+
+			Credentials creds = Credentials.newBuilder()
+				.setUsername(this.username)
+				.setPassword(this.passwordHash)
+				.build();
+
 			while ((read = reader.read(buffer)) != -1) {
 				requestObserver.onNext(UploadData.newBuilder()
 					.setCredentials(creds)
-					.setFilename(file.getName())
+					.setFilename(filePath.toFile().getName())
 					.setContent(ByteString.copyFrom(buffer, 0, read))
 					.build()
 				);
@@ -371,17 +391,53 @@ public class ClientTls {
 			}
 			reader.close();
 		} catch (IOException e) {
-			logger.error("Could not read file", e);
+			logger.error("Could not read file: {}", e.getMessage());
 			requestObserver.onError(e);
 			throw new ClientException(e.getMessage());
 		} catch (StatusRuntimeException e) {
+			logger.warn("Upload failed: {}", e.getMessage());
 			requestObserver.onError(e);
-			throw new ClientException("Upload failed: " + e.getMessage());
+			throw new ClientException(String.format("Upload failed: %s", e.getMessage()));
 		}
 
 		requestObserver.onCompleted();
 
 		// response is received asynchronously
 		finishLatch.await();
+	}
+
+	/**
+	 * Adds a local file to the system
+	 * @param pathName path to the local file
+	 * @throws ClientException if user is not logged in, file does not exist or failed adding
+	 */
+	public void add(String pathName) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+
+		Path path = Paths.get(pathName);
+		if (!Files.isRegularFile(path))
+			throw new ClientException(String.format("%s does not exist or is not a file", path));
+
+		try {
+
+			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			if (!Files.isDirectory(userPath)) {
+				logger.info("Directory for user '{}' does not exist, creating one", this.username);
+				Files.deleteIfExists(userPath);
+				Files.createDirectories(userPath);
+			}
+			String outPath = Paths.get(userPath.toString(), path.getFileName().toString()).toString();
+			cryptoHelper.encrypt(pathName, outPath, this.symmetricKey);
+
+		} catch (FileNotFoundException e) {
+			logger.warn(e.getMessage());
+			throw new ClientException(e.getMessage());
+		} catch (IOException e) {
+			logger.error("Error adding file: ", e.getMessage());
+			throw new ClientException(e.getMessage());
+		}
+
+		logger.info("Success: add {}", pathName);
 	}
 }

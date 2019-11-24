@@ -1,0 +1,8 @@
+# define the system directory
+r3ds.path=.r3ds/files
+
+# define the buffer size when reading files
+buffer.size=16384
+
+# define if client is verbose
+verbose=true
