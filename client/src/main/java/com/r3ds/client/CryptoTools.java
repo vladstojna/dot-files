@@ -12,20 +12,21 @@ import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.DigestException;
 import java.security.DigestInputStream;
+import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.Random;
 
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
+import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
@@ -44,9 +45,11 @@ public class CryptoTools {
 	private static final String ENCRYPTION_ALGO = "AES";
 	private static final String ENCRYPTION_MODE = "CBC";
 	private static final String DIGEST_ALGO = "SHA-256";
+	private static final String MAC_ALGO = "HmacSHA256";
 	private static final int BUFFER_SIZE = 16 * 1024;
 
 	private MessageDigest messageDigest;
+	private Mac mac;
 	private Cipher cipher;
 	private KeyGenerator keyGen;
 	private String kdfAlgo;
@@ -71,10 +74,12 @@ public class CryptoTools {
 			String encryptionAlgo,
 			String mode,
 			String digestAlgo,
+			String macAlgo,
 			int bufferSize)
 	{
 		try {
 			this.messageDigest = MessageDigest.getInstance(digestAlgo);
+			this.mac = Mac.getInstance(macAlgo);
 			this.cipher = Cipher.getInstance(encryptionAlgo + "/" + mode + "/PKCS5Padding");
 			this.kdfAlgo = kdfAlgo;
 			this.encryptionAlgo = encryptionAlgo;
@@ -83,7 +88,9 @@ public class CryptoTools {
 			this.bufferSize = bufferSize;
 			this.keyGen = null;
 		} catch (NoSuchAlgorithmException | NoSuchPaddingException e) {
-			throw new AssertionError(e.getMessage());
+			throw new AssertionError(
+				String.format("%s: error in constructor %s",
+				CryptoTools.class.getSimpleName(), e.getMessage()));
 		}
 	}
 
@@ -97,6 +104,7 @@ public class CryptoTools {
 			ENCRYPTION_ALGO,
 			ENCRYPTION_MODE,
 			DIGEST_ALGO,
+			MAC_ALGO,
 			BUFFER_SIZE);
 	}
 
@@ -124,6 +132,10 @@ public class CryptoTools {
 
 	private MessageDigest getMessageDigest() {
 		return this.messageDigest;
+	}
+
+	private Mac getMac() {
+		return this.mac;
 	}
 
 	private Cipher getCipher() {
@@ -168,6 +180,15 @@ public class CryptoTools {
 	public CryptoTools setDigestAlgorithm(String algorithm) {
 		try {
 			this.messageDigest = MessageDigest.getInstance(algorithm);
+			return this;
+		} catch (NoSuchAlgorithmException e) {
+			throw new AssertionError(e.getMessage());
+		}
+	}
+
+	public CryptoTools setMacAlgorithm(String algorithm) {
+		try {
+			this.mac = Mac.getInstance(algorithm);
 			return this;
 		} catch (NoSuchAlgorithmException e) {
 			throw new AssertionError(e.getMessage());
@@ -243,13 +264,13 @@ public class CryptoTools {
 	}
 
 	/**
-	 * Reads a digest from a stream
+	 * Reads a MAC from a stream
 	 * @param is
 	 * @return
 	 * @throws IOException
 	 */
-	private byte[] readDigest(final InputStream is) throws IOException {
-		return readBytes(getMessageDigest().getDigestLength() + getPadding(getMessageDigest().getDigestLength()), is);
+	private byte[] readMac(final InputStream is) throws IOException {
+		return readBytes(getMac().getMacLength(), is);
 	}
 
 	/**
@@ -298,6 +319,28 @@ public class CryptoTools {
 	}
 
 	/**
+	 * Computes the MAC of a file
+	 * @param pathToFile file to read
+	 * @param key key to use during computation
+	 * @return a MAC (byte array)
+	 * @throws FileNotFoundException if file is not found
+	 * @throws IOException if there as I/O error
+	 * @throws InvalidKeyException if the key provided is invalid for said Mac
+	 */
+	public byte[] computeMac(String pathToFile, Key key)
+			throws FileNotFoundException, IOException, InvalidKeyException {
+		InputStream is = new BufferedInputStream(new FileInputStream(pathToFile));
+		byte[] buffer = new byte[getBufferSize()];
+		int read;
+		getMac().init(key);
+		while ((read = is.read(buffer, 0, getBufferSize())) != -1) {
+			getMac().update(buffer, 0, read);
+		}
+		is.close();
+		return getMac().doFinal();
+	}
+
+	/**
 	 * Encrypts a file, prepends IV and digest
 	 * @param inPath
 	 * @param outPath
@@ -306,23 +349,17 @@ public class CryptoTools {
 	 * @throws IOException
 	 */
 	public void encrypt(String inPath, String outPath, Key key)
-			throws FileNotFoundException, IOException {
+			throws FileNotFoundException, IOException, GeneralSecurityException {
 		try {
-
-			byte[] hash = digestFile(inPath);
-
-			getCipher().init(Cipher.ENCRYPT_MODE, key, genIv());
-
 			byte[] buffer = new byte[getBufferSize()];
 			int read;
+			byte[] mac = computeMac(inPath, key);
+			getCipher().init(Cipher.ENCRYPT_MODE, key, genIv());
 
 			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(inPath));
 			BufferedOutputStream bWriter = new BufferedOutputStream(new FileOutputStream(outPath));
 
-			bWriter.write(getCipher().getIV());
-			bWriter.write(getCipher().doFinal(hash));
-
-			getCipher().init(Cipher.ENCRYPT_MODE, key, genIv());
+			bWriter.write(mac);
 			bWriter.write(getCipher().getIV());
 			while ((read = bReader.read(buffer, 0, getBufferSize())) != -1) {
 				byte[] cipheredData = getCipher().update(buffer, 0, read);
@@ -335,9 +372,9 @@ public class CryptoTools {
 			bWriter.close();
 			bReader.close();
 
-		} catch (InvalidAlgorithmParameterException | InvalidKeyException e) {
+		} catch (InvalidAlgorithmParameterException e) {
 			throw new AssertionError("Error initializing cipher", e);
-		} catch (IllegalBlockSizeException | BadPaddingException e) {
+		} catch (InvalidKeyException e) {
 			throw new AssertionError("Error encrypting file", e);
 		}
 	}
@@ -352,25 +389,24 @@ public class CryptoTools {
 	 * @throws DigestException
 	 */
 	public void decrypt(String inPath, String outPath, Key key)
-			throws FileNotFoundException, IOException, DigestException {
+			throws FileNotFoundException, IOException, GeneralSecurityException {
 		try {
 			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(inPath));
 			BufferedOutputStream bWriter = new BufferedOutputStream(new FileOutputStream(outPath));
 
-			getCipher().init(Cipher.DECRYPT_MODE, key, readIv(bReader));
-
-			byte[] existingHash = getCipher().doFinal(readDigest(bReader));
+			byte[] mac = readMac(bReader);
+			IvParameterSpec iv = readIv(bReader);
+			getCipher().init(Cipher.DECRYPT_MODE, key, iv);
 
 			byte[] buffer = new byte[getBufferSize()];
 			byte[] decipheredData;
 			int read;
 
-			getCipher().init(Cipher.DECRYPT_MODE, key, readIv(bReader));
 			while ((read = bReader.read(buffer, 0, getBufferSize())) != -1) {
 				decipheredData = getCipher().update(buffer, 0, read);
 				if (decipheredData != null) {
 					bWriter.write(decipheredData);
-					getMessageDigest().update(decipheredData);
+					getMac().update(decipheredData);
 				}
 			}
 			decipheredData = getCipher().doFinal();
@@ -379,25 +415,15 @@ public class CryptoTools {
 			bWriter.close();
 			bReader.close();
 
-			if (!Arrays.equals(getMessageDigest().digest(decipheredData), existingHash))
-				throw new DigestException("Digest is not equal, file is corrupted");
+			byte[] newMac = getMac().doFinal(decipheredData);
+			if (!Arrays.equals(newMac, mac))
+				throw new SignatureException("MAC is not equal, file is corrupted");
 
-			getMessageDigest().reset();
-
-		} catch (InvalidAlgorithmParameterException | InvalidKeyException e) {
+		} catch (InvalidAlgorithmParameterException e) {
 			throw new AssertionError("Error initializing cipher", e);
-		} catch (IllegalBlockSizeException | BadPaddingException e) {
-			throw new AssertionError("Error decrypting file", e);
+		} catch (InvalidKeyException e) {
+			throw new AssertionError("Error encrypting file", e);
 		}
-	}
-
-	/**
-	 * Gets the padding size
-	 * @param len
-	 * @return
-	 */
-	private int getPadding(int len) {
-		return getCipher().getBlockSize() - (len % getCipher().getBlockSize());
 	}
 
 	/**
