@@ -17,18 +17,17 @@ CREATE DATABASE IF NOT EXISTS `dot-files` /*!40100 DEFAULT CHARACTER SET utf8mb4
 USE `dot-files`;
 
 -- Dumping structure for table dot-files.file
-DROP TABLE IF EXISTS `file`;
 CREATE TABLE IF NOT EXISTS `file` (
   `file_id` int(11) NOT NULL AUTO_INCREMENT,
   `owner_username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `user_filename` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `local_path` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  PRIMARY KEY (`file_id`)
+  PRIMARY KEY (`file_id`),
+  KEY `owner_username` (`owner_username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Data exporting was unselected.
 -- Dumping structure for table dot-files.file_in_transition
-DROP TABLE IF EXISTS `file_in_transition`;
 CREATE TABLE IF NOT EXISTS `file_in_transition` (
   `username_send` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `file_id` int(11) NOT NULL,
@@ -43,7 +42,6 @@ CREATE TABLE IF NOT EXISTS `file_in_transition` (
 
 -- Data exporting was unselected.
 -- Dumping structure for table dot-files.key_wallet
-DROP TABLE IF EXISTS `key_wallet`;
 CREATE TABLE IF NOT EXISTS `key_wallet` (
   `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `file_id` int(11) NOT NULL,
@@ -53,8 +51,21 @@ CREATE TABLE IF NOT EXISTS `key_wallet` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Data exporting was unselected.
+-- Dumping structure for table dot-files.log_file
+CREATE TABLE IF NOT EXISTS `log_file` (
+  `file_id` int(11) NOT NULL,
+  `time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `status` enum('Create','Read','Update Name','Update Content','Delete') COLLATE utf8mb4_unicode_ci NOT NULL,
+  PRIMARY KEY (`file_id`,`time`),
+  KEY `file_id_username` (`file_id`,`username`),
+  KEY `FK_log_file_user` (`username`),
+  CONSTRAINT `FK_log_file_file` FOREIGN KEY (`file_id`) REFERENCES `file` (`file_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `FK_log_file_user` FOREIGN KEY (`username`) REFERENCES `user` (`username`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Data exporting was unselected.
 -- Dumping structure for table dot-files.shared_file
-DROP TABLE IF EXISTS `shared_file`;
 CREATE TABLE IF NOT EXISTS `shared_file` (
   `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `file_id` int(11) NOT NULL,
@@ -66,7 +77,6 @@ CREATE TABLE IF NOT EXISTS `shared_file` (
 
 -- Data exporting was unselected.
 -- Dumping structure for table dot-files.user
-DROP TABLE IF EXISTS `user`;
 CREATE TABLE IF NOT EXISTS `user` (
   `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `password` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
