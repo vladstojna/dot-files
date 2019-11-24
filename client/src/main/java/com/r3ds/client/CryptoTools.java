@@ -31,6 +31,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class CryptoTools {
 
@@ -39,7 +40,7 @@ public class CryptoTools {
 	/* Default fields */
 	private static final String KDF_ALGO = "PBKDF2WithHmacSHA256";
 	private static final int ITERATIONS = 16 * 1024;
-	private static final int KEY_LENGTH = 128;
+	private static final int PBE_KEY_LEN = 256;
 	private static final String ENCRYPTION_ALGO = "AES";
 	private static final String ENCRYPTION_MODE = "CBC";
 	private static final String DIGEST_ALGO = "SHA-256";
@@ -49,8 +50,9 @@ public class CryptoTools {
 	private Cipher cipher;
 	private KeyGenerator keyGen;
 	private String kdfAlgo;
+	private String encryptionAlgo;
 	private int kdfIterations;
-	private int keyLen;
+	private int pbeKeyLen;
 	private int bufferSize;
 
 	/**
@@ -74,11 +76,12 @@ public class CryptoTools {
 		try {
 			this.messageDigest = MessageDigest.getInstance(digestAlgo);
 			this.cipher = Cipher.getInstance(encryptionAlgo + "/" + mode + "/PKCS5Padding");
-			this.keyGen = KeyGenerator.getInstance(encryptionAlgo);
 			this.kdfAlgo = kdfAlgo;
+			this.encryptionAlgo = encryptionAlgo;
 			this.kdfIterations = iterations;
-			this.keyLen = keyLen;
+			this.pbeKeyLen = keyLen;
 			this.bufferSize = bufferSize;
+			this.keyGen = null;
 		} catch (NoSuchAlgorithmException | NoSuchPaddingException e) {
 			throw new AssertionError(e.getMessage());
 		}
@@ -90,7 +93,7 @@ public class CryptoTools {
 	public CryptoTools() {
 		this(KDF_ALGO,
 			ITERATIONS,
-			KEY_LENGTH,
+			PBE_KEY_LEN,
 			ENCRYPTION_ALGO,
 			ENCRYPTION_MODE,
 			DIGEST_ALGO,
@@ -103,12 +106,16 @@ public class CryptoTools {
 		return this.kdfAlgo;
 	}
 
+	public String getEncryptionAlgorithm() {
+		return this.encryptionAlgo;
+	}
+
 	public int getKdfIterations() {
 		return this.kdfIterations;
 	}
 
-	public int getKeyLen() {
-		return this.keyLen;
+	public int getPbeKeyLen() {
+		return this.pbeKeyLen;
 	}
 
 	public int getBufferSize() {
@@ -151,6 +158,7 @@ public class CryptoTools {
 	public CryptoTools setEncryptionAlgorithm(String algorithm, String mode) {
 		try {
 			this.cipher = Cipher.getInstance(algorithm + "/" + mode + "/PKCS5Padding");
+			this.encryptionAlgo = algorithm;
 			return this;
 		} catch (NoSuchAlgorithmException | NoSuchPaddingException e) {
 			throw new AssertionError(e.getMessage());
@@ -166,9 +174,10 @@ public class CryptoTools {
 		}
 	}
 
-	public CryptoTools setKeyAlgorithm(String algorithm) {
+	public CryptoTools initKeyGenerator(String algorithm, int keyLen) {
 		try {
 			this.keyGen = KeyGenerator.getInstance(algorithm);
+			this.keyGen.init(keyLen);
 			return this;
 		} catch (NoSuchAlgorithmException e) {
 			throw new AssertionError(e.getMessage());
@@ -250,10 +259,10 @@ public class CryptoTools {
 	 * @return
 	 */
 	public SecretKey deriveKey(char[] pw, byte[] salt) {
-		PBEKeySpec spec = new PBEKeySpec(pw, salt, getKdfIterations(), getKeyLen());
+		PBEKeySpec spec = new PBEKeySpec(pw, salt, getKdfIterations(), getPbeKeyLen());
 		try {
 			SecretKeyFactory kf = SecretKeyFactory.getInstance(getKdfAlgorithm());
-			return kf.generateSecret(spec);
+			return new SecretKeySpec(kf.generateSecret(spec).getEncoded(), getEncryptionAlgorithm());
 		} catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
 			throw new AssertionError("Error deriving key", e);
 		} finally {
@@ -266,7 +275,6 @@ public class CryptoTools {
 	 * @return
 	 */
 	public SecretKey generateKey() {
-		getKeyGenerator().init(getKeyLen());
 		return getKeyGenerator().generateKey();
 	}
 
