@@ -37,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
@@ -143,6 +144,12 @@ public class ClientTls {
 		}
 	}
 
+	// TODO: check special characters, numbers and length
+	private void checkPassword(char[] password) throws ClientException {
+		if (password.length < 1) // placeholder, for testing
+			throw new ClientException("Password length must be at least 1 character");
+	}
+
 	/**
 	 * Shuts down client
 	 * @throws InterruptedException
@@ -175,24 +182,30 @@ public class ClientTls {
 	 * @param password
 	 * @throws ClientException when signup is unsucessful or if a user is logged in
 	 */
-	public void signup(String username, char[] password) throws ClientException {
-		if (isLoggedIn)
-			throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
-
-		logger.info("Request: Signup with username '{}'", username);
-		Credentials request = Credentials.newBuilder()
-				.setUsername(username)
-				.setPassword(Hashing.sha256()
-					.hashString(CharBuffer.wrap(password) , StandardCharsets.UTF_8)
-					.toString())
-				.build();
+	public void signup(String username, char[] password, char[] pwAgain) throws ClientException {
 		try {
+			if (isLoggedIn)
+				throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
+			if (!Arrays.equals(password, pwAgain))
+				throw new ClientException("Passwords do not match");
+			checkPassword(password);
+
+			logger.info("Request: Signup with username '{}'", username);
+			Credentials request = Credentials.newBuilder()
+					.setUsername(username)
+					.setPassword(Hashing.sha256()
+						.hashString(CharBuffer.wrap(password) , StandardCharsets.UTF_8)
+						.toString())
+					.build();
 			authBlockingStub.signup(request);
+			logger.info("Signup successful");
 		} catch (StatusRuntimeException e) {
 			logger.warn("Signup failed: {}", e.getMessage());
 			throw new ClientException(e.getMessage());
+		} finally {
+			CryptoTools.clear(password);
+			CryptoTools.clear(pwAgain);
 		}
-		logger.info("Signup successful");
 	}
 
 	/**
@@ -236,30 +249,32 @@ public class ClientTls {
 	 * @throws ClientException when authentication fails or a user is logged in
 	 */
 	public void login(String username, char[] password) throws ClientException {
-		if (isLoggedIn)
-			throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
-
-		SecretKey key = cryptoHelper.deriveKey(password,
-			Hashing.sha256()
-				.hashString(username, StandardCharsets.UTF_8)
-				.asBytes());
-		String passwordToServer = Hashing.sha256()
-			.hashString(CharBuffer.wrap(password), StandardCharsets.UTF_8)
-			.toString();
-
-		logger.info("Request: Login with username '{}'", username);
-		Credentials request = Credentials.newBuilder()
-				.setUsername(username)
-				.setPassword(passwordToServer)
-				.build();
 		try {
+			if (isLoggedIn)
+				throw new ClientException(String.format("Logged in as '%s', logout first", this.username));
+
+			SecretKey key = cryptoHelper.deriveKey(password,
+				Hashing.sha256()
+					.hashString(username, StandardCharsets.UTF_8)
+					.asBytes());
+			String passwordToServer = Hashing.sha256()
+				.hashString(CharBuffer.wrap(password), StandardCharsets.UTF_8)
+				.toString();
+
+			logger.info("Request: Login with username '{}'", username);
+			Credentials request = Credentials.newBuilder()
+					.setUsername(username)
+					.setPassword(passwordToServer)
+					.build();
 			authBlockingStub.login(request);
+			setLoggedIn(username, passwordToServer, key);
+			logger.info("Login successful");
 		} catch (StatusRuntimeException e) {
 			logger.warn("Login failed: {}", e.getMessage());
 			throw new ClientException(e.getMessage());
+		} finally {
+			CryptoTools.clear(password);
 		}
-		setLoggedIn(username, passwordToServer, key);
-		logger.info("Login successful");
 	}
 	
 	/**

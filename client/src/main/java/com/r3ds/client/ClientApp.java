@@ -100,14 +100,7 @@ public class ClientApp
 							username = console.readLine("Username: ");
 							password = console.readPassword("Password: ");
 							char[] passwordAgain = console.readPassword("Repeat password: ");
-							if (Arrays.equals(password, passwordAgain)) {
-								client.signup(username, password);
-							} else {
-								System.out.println("Passwords do not match!");
-							}
-							// clear the passwords
-							Arrays.fill(password, '\0');
-							Arrays.fill(passwordAgain, '\0');
+							client.signup(username, password, passwordAgain);
 							break;
 
 						case "login":
@@ -116,7 +109,6 @@ public class ClientApp
 							username = console.readLine("Username: ");
 							password = console.readPassword("Password: ");
 							client.login(username, password);
-							Arrays.fill(password, '\0');
 							break;
 
 						case "logout":
