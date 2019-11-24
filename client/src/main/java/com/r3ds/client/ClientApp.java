@@ -31,17 +31,22 @@ public class ClientApp
 	private static void printHelp() {
 		System.out.println();
 		System.out.println("Available commands:");
-		System.out.printf("%-10s %s%n", "help", "print this message");
-		System.out.printf("%-10s %s%n", "exit", "exits the application");
+		System.out.printf("%-10s%s%n", "help", "print this message");
+		System.out.printf("%-10s%s%n", "exit", "exits the application");
 		System.out.println();
 
-		System.out.printf("%-10s %s%n", "signup", "begins interactive signup");
-		System.out.printf("%-10s %s%n", "login", "begins interactive login");
+		System.out.printf("%-10s%s%n", "signup", "begins interactive signup");
+		System.out.printf("%-10s%s%n", "login", "begins interactive login");
 		System.out.println();
 
-		System.out.printf("%-8s %-15s %s%n", "download", "[filename]", "downloads file with name 'filename' from server");
-		System.out.printf("%-8s %-15s %s%n", "upload", "[filename]", "uploads file with name 'filename' to server");
-		System.out.printf("%-8s %-15s %s%n", "add", "[filename]", "starts tracking file in 'localpath'");
+		System.out.printf("%-10s%-15s%s%n", "add", "[localpath]", "starts tracking file in 'localpath'");
+		System.out.println();
+
+		System.out.printf("%-10s%-15s%s%n", "download", "[filename]", "downloads file with name 'filename' from server");
+		System.out.printf("%-10s%-15s%s%n", "upload", "[filename]", "uploads file with name 'filename' to server");
+		System.out.printf("%-10s%-15s%s%n", "open", "[filename]", "decrypts file with name 'filename'");
+		System.out.printf("%-10s%-15s%s%n", "close", "[filename]", "encrypts file with 'filename' (must have been opened previously)");
+		System.out.printf("%-25s%s%n", "closeall", "encrypts all opened files");
 	}
 
 	public static void main(String[] args) throws Exception
@@ -86,8 +91,10 @@ public class ClientApp
 				try {
 					switch (command) {
 						case "exit":
-							if (parseEmptyCommand(arguments))
+							if (parseEmptyCommand(arguments)) {
+								client.exit();
 								toExit = true;
+							}
 							break;
 						case "help":
 							if (parseEmptyCommand(arguments))
@@ -134,6 +141,16 @@ public class ClientApp
 						case "open":
 							if (parseOneArgumentCommand(arguments))
 								client.open(arguments.get(0));
+							break;
+
+						case "close":
+							if (parseOneArgumentCommand(arguments))
+								client.close(arguments.get(0));
+							break;
+
+						case "closeall":
+							if (parseEmptyCommand(arguments))
+								client.closeAll();
 							break;
 
 						default:
