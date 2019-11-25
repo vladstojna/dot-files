@@ -37,10 +37,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.DigestException;
+import java.security.GeneralSecurityException;
+import java.security.SignatureException;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -49,6 +52,18 @@ import javax.net.ssl.SSLException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+/** TODO:
+ * - list remote files
+ * - better exception handling when closing all files, e.g.
+ *     if file is manually deleted before closing all, then program won't exit
+ *     because exception saying said file does not exist will be thrown
+ * - when opening file that does not exist, download it
+ * - when closing file, upload it
+ * - delete-local & delete commands
+ * - some code cleanup may be necessary
+ * - password length, special characters and numbers verification
+ */
 
 /**
  * A simple client that requests a greeting from the {@link HelloWorldServerTls}
@@ -76,6 +91,9 @@ public class ClientTls {
 	private boolean isLoggedIn;
 
 	private CryptoTools cryptoHelper;
+
+	// maintains a set of opened files
+	private Set<String> openFiles;
 
 	/**
 	 * Builds SSL context
@@ -122,8 +140,10 @@ public class ClientTls {
 		this.downloadBlockingStub = FileTransferServiceGrpc.newBlockingStub(channel);
 		this.uploadStub = FileTransferServiceGrpc.newStub(channel);
 		this.cryptoHelper = new CryptoTools();
+		this.openFiles = new HashSet<>();
 		setLoggedOut();
 		loadConfig();
+		addShutdownHook();
 	}
 
 	/**
@@ -145,7 +165,26 @@ public class ClientTls {
 		}
 	}
 
-	// TODO: check special characters, numbers and length
+	/**
+	 * Closes all files, logs out and exits if the JVM shutsdown
+	 */
+	private void addShutdownHook() {
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			@Override
+			public void run() {
+				try {
+					System.err.println("*** shutting down client");
+					ClientTls.this.exit();
+				} catch (ClientException e) {
+					e.printStackTrace();
+				} finally {
+					System.err.println("*** done");
+				}
+				
+			}
+		});
+	}
+
 	private void checkPassword(char[] password) throws ClientException {
 		if (password.length < 1) // placeholder, for testing
 			throw new ClientException("Password length must be at least 1 character");
@@ -157,6 +196,15 @@ public class ClientTls {
 	 */
 	public void shutdown() throws InterruptedException {
 		channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+	}
+
+	/**
+	 * Exits the application
+	 * @throws ClientException
+	 */
+	public void exit() throws ClientException {
+		justCloseAll();
+		setLoggedOut();
 	}
 
 	/**
@@ -240,7 +288,6 @@ public class ClientTls {
 		this.username = null;
 		this.passwordHash = null;
 		this.isLoggedIn = false;
-		
 	}
 
 	/**
@@ -287,6 +334,7 @@ public class ClientTls {
 			throw new ClientException("Not logged in");
 
 		logger.info("Request: Logout with username '{}'", this.username);
+		justCloseAll();
 		setLoggedOut();
 		logger.info("Logout successful");
 	}
@@ -457,6 +505,12 @@ public class ClientTls {
 		logger.info("Success: add {}", pathName);
 	}
 
+	/**
+	 * "Opens" a file, i.e. decrypts its contents
+	 * @param filename name of file to encrypt
+	 * @throws ClientException if not logged in, file does not exist,
+	 * already opened previously or decryption failed
+	 */
 	public void open(String filename) throws ClientException {
 		if (!isLoggedIn)
 			throw new ClientException("Not logged in");
@@ -467,20 +521,155 @@ public class ClientTls {
 		if (!Files.isRegularFile(filePath))
 			throw new ClientException(String.format("%s does not exist or is not a file", filePath));
 
+		Path outPath = null;
 		try {
-			Path outPath = Paths.get(userPath.toString(), filename + "_");
+
+			if (openFiles.contains(filename)) {
+				throw new ClientException(String.format("File '%s' is already decrypted", filename));
+			}
+
+			outPath = Paths.get(userPath.toString(), filename + "_");
 			cryptoHelper.decrypt(filePath.toString(), outPath.toString(), this.symmetricKey);
 			Files.move(outPath, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+			openFiles.add(filename);
 			logger.info("Successfully decrypted file '{}'", filename);
+
 		} catch (FileNotFoundException e) {
 			logger.warn(e.getMessage());
 			throw new ClientException(e.getMessage());
 		} catch (IOException e) {
-			logger.error("Error opening file: ", e.getMessage());
+			logger.error("Error opening file: {}", e.getMessage());
 			throw new ClientException(e.getMessage());
-		} catch (DigestException e) {
-			logger.error("Error opening file: ", e.getMessage());
+		} catch (SignatureException e) {
+			logger.error("Error opening file: {}", e.getMessage());
+			throw new ClientException("File is corrupted");
+		} catch (GeneralSecurityException e) {
+			logger.error(e.getMessage());
+			throw new ClientException("Error decrypting file: incorrect secret key or file is corrupted");
+		} finally {
+			try {
+				if (outPath != null)
+					Files.deleteIfExists(outPath);
+			} catch (IOException e) {
+				logger.error("Error cleaning up file: {}", e.getMessage());
+				throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
+			}
+		}
+	}
+
+	/**
+	 * Only closes the file, does not modify the opened files structure
+	 * @param filename
+	 * @throws ClientException
+	 */
+	private void justClose(String filename) throws ClientException {
+		Path outPath = null;
+		try {
+			// check if file with said name exists as regular file
+			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			Path filePath = Paths.get(userPath.toString(), filename);
+			if (!Files.isRegularFile(filePath))
+				throw new ClientException(String.format("%s does not exist or is not a file", filePath));
+
+			outPath = Paths.get(userPath.toString(), filename + "_");
+			cryptoHelper.encrypt(filePath.toString(), outPath.toString(), this.symmetricKey);
+			Files.move(outPath, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			logger.info("Successfully encrypted file '{}'", filename);
+
+		} catch (FileNotFoundException e) {
+			logger.warn(e.getMessage());
 			throw new ClientException(e.getMessage());
+		} catch (IOException e) {
+			logger.error("Error closing file: {}", e.getMessage());
+			throw new ClientException(e.getMessage());
+		} finally {
+			try {
+				if (outPath != null)
+					Files.deleteIfExists(outPath);
+			} catch (IOException e) {
+				logger.error("Error cleaning up file: {}", e.getMessage());
+				throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
+			}
+		}
+	}
+
+	/**
+	 * "Closes" a file, i.e. encrypts its contents
+	 * @param filename name of file to encrypt
+	 * @throws ClientException
+	 */
+	public void close(String filename) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+
+		if (openFiles.isEmpty())
+			throw new ClientException("No open files");
+		if (!openFiles.contains(filename))
+			throw new ClientException(String.format("File '%s' is already encrypted", filename));
+		justClose(filename);
+		openFiles.remove(filename);
+	}
+
+	/**
+	 * Closes all files
+	 * @throws ClientException if unable to close a file
+	 */
+	private void justCloseAll() throws ClientException {
+		for (String filename : this.openFiles)
+			justClose(filename);
+		this.openFiles.clear();
+	}
+
+	/**
+	 * Closes all
+	 * @throws ClientException if not logged in, no opened files or unable to close a file
+	 */
+	public void closeAll() throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+		if (this.openFiles.isEmpty())
+			throw new ClientException("No open files");
+		justCloseAll();
+	}
+
+	/**
+	 * Lists all client files
+	 * @return formatted string with file information
+	 * @throws ClientException
+	 */
+	public String list() throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+
+		try {
+			StringBuilder sb = new StringBuilder();
+			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			if (Files.isDirectory(userPath)) {
+				sb.append(String.format(
+					"%-30s| %-10s| %-8s| %-30s| %-20s",
+					"Name", "Type", "State", "Modification Date", "Size (bytes)"))
+				.append('\n')
+				.append(new String(new char[106]).replace('\0', '-'));
+				Iterator<Path> it = Files.list(userPath).iterator();
+				while (it.hasNext()) {
+					sb.append('\n');
+					Path next = it.next();
+					String toAppend = String.format(
+						"%-30s| %-10s| %-8s| %-30s| %-20s",
+						next.getFileName().toString(),
+						"LOCAL",
+						this.openFiles.contains(next.getFileName().toString()) ? "OPEN" : "CLOSED",
+						Files.getLastModifiedTime(next),
+						Files.size(next)
+					);
+					sb.append(toAppend);
+				}
+			}
+			return sb.toString();
+		} catch (IOException e) {
+			logger.error("Unable to list files: {}", e);
+			throw new ClientException("Unable to list files: " + e.getMessage());
 		}
 	}
 }

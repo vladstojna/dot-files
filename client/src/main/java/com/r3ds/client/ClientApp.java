@@ -31,17 +31,25 @@ public class ClientApp
 	private static void printHelp() {
 		System.out.println();
 		System.out.println("Available commands:");
-		System.out.printf("%-10s %s%n", "help", "print this message");
-		System.out.printf("%-10s %s%n", "exit", "exits the application");
+		System.out.printf("%-10s%s%n", "help", "print this message");
+		System.out.printf("%-10s%s%n", "exit", "exits the application");
 		System.out.println();
 
-		System.out.printf("%-10s %s%n", "signup", "begins interactive signup");
-		System.out.printf("%-10s %s%n", "login", "begins interactive login");
+		System.out.printf("%-10s%s%n", "signup", "begins interactive signup");
+		System.out.printf("%-10s%s%n", "login", "begins interactive login");
 		System.out.println();
 
-		System.out.printf("%-8s %-15s %s%n", "download", "[filename]", "downloads file with name 'filename' from server");
-		System.out.printf("%-8s %-15s %s%n", "upload", "[filename]", "uploads file with name 'filename' to server");
-		System.out.printf("%-8s %-15s %s%n", "add", "[filename]", "starts tracking file in 'localpath'");
+		System.out.printf("%-10s%-15s%s%n", "add", "[localpath]", "starts tracking file in 'localpath'");
+		System.out.println();
+
+		System.out.printf("%-10s%-15s%s%n", "download", "[filename]", "downloads file with name 'filename' from server");
+		System.out.printf("%-10s%-15s%s%n", "upload", "[filename]", "uploads file with name 'filename' to server");
+		System.out.printf("%-10s%-15s%s%n", "open", "[filename]", "decrypts file with name 'filename'");
+		System.out.printf("%-10s%-15s%s%n", "close", "[filename]", "encrypts file with 'filename' (must have been opened previously)");
+		System.out.printf("%-25s%s%n", "closeall", "encrypts all opened files");
+		System.out.println();
+
+		System.out.printf("%-25s%s%n", "list", "lists current user's files");
 	}
 
 	public static void main(String[] args) throws Exception
@@ -86,8 +94,12 @@ public class ClientApp
 				try {
 					switch (command) {
 						case "exit":
-							if (parseEmptyCommand(arguments))
+							if (parseEmptyCommand(arguments)) {
+								System.out.println("Exiting...");
+								client.exit();
 								toExit = true;
+								System.out.println("Exit success");
+							}
 							break;
 						case "help":
 							if (parseEmptyCommand(arguments))
@@ -100,7 +112,9 @@ public class ClientApp
 							username = console.readLine("Username: ");
 							password = console.readPassword("Password: ");
 							char[] passwordAgain = console.readPassword("Repeat password: ");
+							System.out.println("Signing up...");
 							client.signup(username, password, passwordAgain);
+							System.out.println("Signup success");
 							break;
 
 						case "login":
@@ -108,32 +122,73 @@ public class ClientApp
 								break;
 							username = console.readLine("Username: ");
 							password = console.readPassword("Password: ");
+							System.out.println("Logging in...");
 							client.login(username, password);
+							System.out.println("Login success");
 							break;
 
 						case "logout":
-							if (parseEmptyCommand(arguments))
+							if (parseEmptyCommand(arguments)) {
+								System.out.println("Logging out...");
 								client.logout();
+								System.out.println("Logout success");
+							}
 							break;
 
 						case "download":
-							if (parseOneArgumentCommand(arguments))
+							if (parseOneArgumentCommand(arguments)) {
+								System.out.printf("Downloading %s...%n", arguments.get(0));
 								client.download(arguments.get(0));
+								System.out.println("Download success");
+							}
 							break;
 
 						case "upload":
-							if (parseOneArgumentCommand(arguments))
+							if (parseOneArgumentCommand(arguments)) {
+								System.out.printf("Uploading %s...%n", arguments.get(0));
 								client.upload(arguments.get(0));
+								System.out.println("Upload success");
+							}
 							break;
 
 						case "add":
-							if (parseOneArgumentCommand(arguments))
+							if (parseOneArgumentCommand(arguments)) {
+								System.out.printf("Adding %s...%n", arguments.get(0));
 								client.add(arguments.get(0));
+								System.out.println("Add success");
+							}
 							break;
 
 						case "open":
-							if (parseOneArgumentCommand(arguments))
+							if (parseOneArgumentCommand(arguments)) {
+								System.out.printf("Opening %s...%n", arguments.get(0));
 								client.open(arguments.get(0));
+								System.out.println("Open success");
+							}
+							break;
+
+						case "close":
+							if (parseOneArgumentCommand(arguments)) {
+								System.out.printf("Closing %s...%n", arguments.get(0));
+								client.close(arguments.get(0));
+								System.out.println("Close success");
+							}
+							break;
+
+						case "closeall":
+							if (parseEmptyCommand(arguments)) {
+								System.out.println("Closing all...");
+								client.closeAll();
+								System.out.println("Closeall success");
+							}
+							break;
+
+						case "list":
+							if (parseEmptyCommand(arguments)) {
+								System.out.println("Listing...");
+								System.out.println(client.list());
+								System.out.println("List success");
+							}
 							break;
 
 						default:
