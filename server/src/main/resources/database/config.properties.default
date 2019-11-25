@@ -1,3 +1,4 @@
+db.host=
 db.name=
 db.port=
 db.user=

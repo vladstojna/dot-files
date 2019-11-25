@@ -20,14 +20,13 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 			System.out.printf("Signup - create account with username %s%n", request.getUsername());
 
 		try {
-			if (!AuthTools.signup(Database.getConnection(), request.getUsername(), request.getPassword())) {
-				responseObserver.onError(Status
-						.ALREADY_EXISTS
-						.withDescription("Username already exists.")
-						.withCause(new AuthException("Username already exists."))
-						.asRuntimeException()
-				);
-			}
+			AuthTools.signup(Database.getConnection(), request.getUsername(), request.getPassword());
+			responseObserver.onError(Status
+					.ALREADY_EXISTS
+					.withDescription("Username already exists.")
+					.withCause(new AuthException("Username already exists."))
+					.asRuntimeException()
+			);
 		} catch (SQLException e) {
 			responseObserver.onError(Status
 					.INTERNAL
@@ -35,6 +34,7 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 					.withCause(e)
 					.asRuntimeException()
 			);
+			return;
 		} catch (AuthException e) {
 			responseObserver.onError(Status
 					.INTERNAL
@@ -42,6 +42,7 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 					.withCause(e)
 					.asRuntimeException()
 			);
+			return;
 		}
 
 		Auth.SignupResponse response = Auth.SignupResponse.newBuilder()
@@ -65,12 +66,14 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 					.withDescription("Impossible to authenticate. Please try again.")
 					.withCause(e)
 					.asRuntimeException());
+			return;
 		} catch (AuthException e) {
 			System.out.println("Username and password provided are not a match.");
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("You are not logged in.")
 					.withCause(e)
 					.asRuntimeException());
+			return;
 		}
 	
 		Auth.LoginResponse response = Auth.LoginResponse.newBuilder()

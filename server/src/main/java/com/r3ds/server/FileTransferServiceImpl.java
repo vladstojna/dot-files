@@ -7,6 +7,8 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.*;
 
@@ -20,6 +22,7 @@ import com.r3ds.FileTransfer.UploadResponse;
 import com.r3ds.FileTransferServiceGrpc.FileTransferServiceImplBase;
 
 import com.r3ds.server.exception.AuthException;
+import com.r3ds.server.file.FileInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,45 +35,30 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 	private final Logger logger = LoggerFactory.getLogger(getClass());
 
 	private static final int BUFFER_SIZE = 4096;
-	
-	private enum LogStatus {
-		CREATE,
-		READ,
-		UPDATE_NAME,
-		UPDATE_CONTENT,
-		DELETE
-	}
 
 	@Override
 	public void download(DownloadRequest request, StreamObserver<Chunk> responseObserver) {
+		
+		Connection conn = null;
 		try {
+			conn = Database.getConnection();
 			AuthTools.login(
 					Database.getConnection(),
 					request.getCredentials().getUsername(),
 					request.getCredentials().getPassword()
 			);
-		} catch (SQLException e) {
-			e.printStackTrace();
-			responseObserver.onError(Status.INTERNAL
-					.withDescription("Error uploading file, please try again.")
-					.withCause(e)
-					.asRuntimeException());
-		} catch (AuthException e) {
-			System.out.println("Username and password provided are not a match.");
-			responseObserver.onError(Status.INTERNAL
-					.withDescription("You are not logged in.")
-					.withCause(e)
-					.asRuntimeException());
-		}
-		
-		try {
-
+			
 			logger.info("Download request from '{}' for file '{}'",
 				request.getCredentials().getUsername(), request.getFilename());
-
+			
 			// check database for path and if user can download it
-			// temporary path value, user's home
-			String path = Paths.get(System.getProperty("user.home"), "r3ds-files", "server", request.getFilename()).toString();
+			FileInfo fileInfo = FileTools.existFile(conn, request.getCredentials().getUsername(), request.getFilename());
+			
+			if (fileInfo.isNullFileInfo())
+				throw new FileNotFoundException(String.format("File %s was not found.", request.getFilename()));
+			
+			int fileId = fileInfo.getFileId();
+			String path = fileInfo.getPath();
 
 			BufferedInputStream reader = new BufferedInputStream(
 				new FileInputStream(path));
@@ -84,8 +72,22 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					.build());
 			}
 			reader.close();
+			
+			FileTools.logActionInFile(conn, fileId, request.getCredentials().getUsername(), FileTools.LogStatus.READ);
 			responseObserver.onCompleted();
-
+			
+		} catch (AuthException e) {
+			System.out.println("Username and password provided are not a match.");
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("You are not logged in.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (SQLException e) {
+			e.printStackTrace();
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("Something unexpected happend with DB.")
+					.withCause(e)
+					.asRuntimeException());
 		} catch (FileNotFoundException e) {
 			logger.error("File not found: {}", e.getMessage());
 			responseObserver.onError(Status.INTERNAL
@@ -99,6 +101,8 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				.withDescription("Error downloading file, please try again.")
 				.withCause(e)
 				.asRuntimeException());
+		} finally {
+			Database.closeConnection(conn);
 		}
 	}
 
@@ -119,16 +123,23 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					uploadData.getCredentials().getUsername(), uploadData.getFilename());
 				callCount++;
 				
-				// temporary path value, user's home
-				String path = Paths.get(System.getProperty("user.home"), "r3ds-files", "server",
-						uploadData.getCredentials().getUsername(), uploadData.getFilename()).toString();
-				pathToFile = path;
-						
-				byte[] content = uploadData.getContent().toByteArray();
-
+				
 				try {
+					// temporary path value, user's home
+					Path path = Paths.get(System.getProperty("user.home"), ".r3ds", "server",
+							uploadData.getCredentials().getUsername());
+					
+					if (!Files.isDirectory(path)) {
+						logger.info("Directory for user '{}' does not exist, creating one", uploadData.getCredentials().getUsername());
+						Files.deleteIfExists(path);
+						Files.createDirectories(path);
+					}
+					pathToFile = Paths.get(path.toString(), uploadData.getFilename()).toString();
+					
+					byte[] content = uploadData.getContent().toByteArray();
+					
 					if (writer == null) {
-						writer = new BufferedOutputStream(new FileOutputStream(path));
+						writer = new BufferedOutputStream(new FileOutputStream(pathToFile));
 					}
 					writer.write(content);
 					writer.flush();
@@ -160,8 +171,9 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			public void onCompleted() {
 				responseObserver.onNext(UploadResponse.newBuilder().build());
 				
+				Connection conn = null;
 				try {
-					Connection conn = Database.getConnection();
+					conn = Database.getConnection();
 					
 					AuthTools.login(
 							conn,
@@ -169,32 +181,40 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 							lastUploadData.getCredentials().getPassword()
 					);
 					
-					String path = pathToFile;
-					boolean fileAlreadyExists = false;
-					
 					// check database if file already exists
-					String filePathInDB = FileTools.existFile(
+					FileInfo fileInfo = FileTools.existFile(
 							conn,
 							lastUploadData.getCredentials().getUsername(),
 							lastUploadData.getFilename()
 					);
 					
-					if (filePathInDB != null) {
-						path = filePathInDB;
-						fileAlreadyExists = true;
+					if (fileInfo.isNullFileInfo()) {
+						// if new, it will save in db
+						int fileId = FileTools.createFileInDB(
+								conn,
+								lastUploadData.getCredentials().getUsername(),
+								lastUploadData.getFilename(),
+								pathToFile
+						);
+						FileTools.logActionInFile(
+								conn,
+								fileId,
+								lastUploadData.getCredentials().getUsername(),
+								FileTools.LogStatus.CREATE
+						);
+					} else {
+						// if already exists
+						pathToFile = fileInfo.getPath();
+						FileTools.logActionInFile(
+								conn,
+								fileInfo.getFileId(),
+								lastUploadData.getCredentials().getUsername(),
+								FileTools.LogStatus.UPDATE_CONTENT
+						);
 					}
 					
-					PreparedStatement stmt = conn.prepareStatement("INSERT INTO file(owner_username, user_filename, local_path) " +
-							"VALUES(?, ?, ?) ON DUPLICATE KEY UPDATE file_id = LAST_INSERT_ID(file_id)", Statement.RETURN_GENERATED_KEYS);
-					stmt.setString(1, lastUploadData.getCredentials().getUsername());
-					stmt.setString(2, lastUploadData.getFilename());
-					stmt.setString(3, path);
-					stmt.executeUpdate();
-					int fileId = stmt.getGeneratedKeys().getInt(1);
-					stmt.close();
+					responseObserver.onCompleted();
 					
-					LogStatus logStatus = (fileAlreadyExists ? LogStatus.UPDATE_CONTENT : LogStatus.CREATE);
-					logActionInFile(conn, fileId, lastUploadData.getCredentials().getUsername(), logStatus);
 				} catch (SQLException e) {
 					e.printStackTrace();
 					responseObserver.onError(Status.INTERNAL
@@ -207,9 +227,10 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 							.withDescription("You are not logged in.")
 							.withCause(e)
 							.asRuntimeException());
+				} finally {
+					Database.closeConnection(conn);
 				}
 				
-				responseObserver.onCompleted();
 				if (writer != null) {
 					try {
 						writer.close();
@@ -221,41 +242,5 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				}
 			}
 		};
-	}
-	
-	/**
-	 *
-	 * @param conn
-	 * @param fileId
-	 * @param username
-	 * @param status
-	 * @throws SQLException
-	 */
-	private void logActionInFile(Connection conn, int fileId, String username, LogStatus status) throws SQLException {
-		PreparedStatement stmt = conn.prepareStatement("INSERT INTO log_file(file_id, username, status) " +
-				"VALUES(?, ?, ?)");
-		stmt.setInt(1, fileId);
-		stmt.setString(2, username);
-		String statusText = "";
-		switch (status) {
-			case CREATE:
-				statusText = "Create";
-				break;
-			case READ:
-				statusText = "Read";
-				break;
-			case UPDATE_NAME:
-				statusText = "Update Name";
-				break;
-			case UPDATE_CONTENT:
-				statusText = "Update Content";
-				break;
-			case DELETE:
-				statusText = "Delete";
-				break;
-		}
-		stmt.setString(3, statusText);
-		stmt.executeUpdate();
-		stmt.close();
 	}
 }

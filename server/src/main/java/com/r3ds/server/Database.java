@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Properties;
 
@@ -28,18 +29,25 @@ public class Database {
 			prop.load(input);
 
 			// get the property value and print it out
+			String dbHost = prop.getProperty("db.host");
 			String dbName = prop.getProperty("db.name");
 			int dbPort = Integer.parseInt(prop.getProperty("db.port"));
 			String dbUsername = prop.getProperty("db.user");
 			String dbPassword = prop.getProperty("db.pass");
 
-			Class.forName("com.mysql.jdbc.Driver");
+			Class.forName("org.postgresql.Driver");
 			// TODO: ver como usar certificados na ligacao com a base de dados
-			return DriverManager.getConnection(
-					"jdbc:mysql://localhost:" + dbPort + "/" + dbName + "?useUnicode=yes&characterEncoding=UTF-8&verifyServerCertificate=false&useSSL=true",
+			Connection conn = DriverManager.getConnection(
+					"jdbc:postgresql://" + dbHost + ":" + dbPort + "/" + dbName,
 					dbUsername,
 					dbPassword
 			);
+			
+			PreparedStatement stmt = conn.prepareStatement("SET search_path TO 'dot-files'");
+			stmt.execute();
+			stmt.close();
+			
+			return conn;
 		} catch (IOException | ClassNotFoundException | SQLException e) {
 			System.out.println(e);
 			throw new SQLException("The database connection failed.", e);
