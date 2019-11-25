@@ -1,89 +1,155 @@
--- --------------------------------------------------------
--- Anfitrião:                    127.0.0.1
--- Versão do servidor:           5.7.14 - MySQL Community Server (GPL)
--- Server OS:                    Win64
--- HeidiSQL Versão:              9.5.0.5196
--- --------------------------------------------------------
+--
+-- PostgreSQL database dump
+--
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET NAMES utf8 */;
-/*!50503 SET NAMES utf8mb4 */;
-/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
-/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+-- Dumped from database version 9.4.10
+-- Dumped by pg_dump version 10.4
+
+-- Started on 2019-11-25 09:57:38
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET client_min_messages = warning;
+
+--
+-- TOC entry 8 (class 2615 OID 6852750)
+-- Name: dot-files; Type: SCHEMA; Schema: -; Owner: ist186428
+--
+
+CREATE SCHEMA "dot-files";
 
 
--- Dumping database structure for dot-files
-CREATE DATABASE IF NOT EXISTS `dot-files` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci */;
-USE `dot-files`;
+ALTER SCHEMA "dot-files" OWNER TO ist186428;
 
--- Dumping structure for table dot-files.file
-CREATE TABLE IF NOT EXISTS `file` (
-  `file_id` int(11) NOT NULL AUTO_INCREMENT,
-  `owner_username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `user_filename` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `local_path` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  PRIMARY KEY (`file_id`),
-  KEY `owner_username` (`owner_username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+SET default_tablespace = '';
 
--- Data exporting was unselected.
--- Dumping structure for table dot-files.file_in_transition
-CREATE TABLE IF NOT EXISTS `file_in_transition` (
-  `username_send` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `file_id` int(11) NOT NULL,
-  `username_receive` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `shared_key` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  PRIMARY KEY (`username_send`,`username_receive`,`file_id`),
-  KEY `FK_file_in_transition_shared_file` (`username_send`,`file_id`),
-  KEY `FK_file_in_transition_user` (`username_receive`),
-  CONSTRAINT `FK_file_in_transition_shared_file` FOREIGN KEY (`username_send`, `file_id`) REFERENCES `shared_file` (`username`, `file_id`),
-  CONSTRAINT `FK_file_in_transition_user` FOREIGN KEY (`username_receive`) REFERENCES `user` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+SET default_with_oids = false;
 
--- Data exporting was unselected.
--- Dumping structure for table dot-files.key_wallet
-CREATE TABLE IF NOT EXISTS `key_wallet` (
-  `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `file_id` int(11) NOT NULL,
-  `shared_key` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  PRIMARY KEY (`username`,`file_id`),
-  CONSTRAINT `FK__shared_file` FOREIGN KEY (`username`, `file_id`) REFERENCES `shared_file` (`username`, `file_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TYPE "dot-files".log_status AS ENUM (
+	'Create',
+    'Read',
+    'Update Name',
+    'Update Content',
+    'Delete'
+);
+	
+ALTER TYPE "dot-files".log_status OWNER TO ist186428;
 
--- Data exporting was unselected.
--- Dumping structure for table dot-files.log_file
-CREATE TABLE IF NOT EXISTS `log_file` (
-  `file_id` int(11) NOT NULL,
-  `time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `status` enum('Create','Read','Update Name','Update Content','Delete') COLLATE utf8mb4_unicode_ci NOT NULL,
-  PRIMARY KEY (`file_id`,`time`),
-  KEY `file_id_username` (`file_id`,`username`),
-  KEY `FK_log_file_user` (`username`),
-  CONSTRAINT `FK_log_file_file` FOREIGN KEY (`file_id`) REFERENCES `file` (`file_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `FK_log_file_user` FOREIGN KEY (`username`) REFERENCES `user` (`username`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Data exporting was unselected.
--- Dumping structure for table dot-files.shared_file
-CREATE TABLE IF NOT EXISTS `shared_file` (
-  `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `file_id` int(11) NOT NULL,
-  PRIMARY KEY (`username`,`file_id`),
-  KEY `FK_shared_file_file` (`file_id`),
-  CONSTRAINT `FK_shared_file_file` FOREIGN KEY (`file_id`) REFERENCES `file` (`file_id`),
-  CONSTRAINT `FK_shared_file_user` FOREIGN KEY (`username`) REFERENCES `user` (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--
+-- TOC entry 212 (class 1259 OID 6854189)
+-- Name: file; Type: TABLE; Schema: dot-files; Owner: ist186428
+--
 
--- Data exporting was unselected.
--- Dumping structure for table dot-files.user
-CREATE TABLE IF NOT EXISTS `user` (
-  `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `password` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  PRIMARY KEY (`username`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE "dot-files".file (
+    file_id SERIAL NOT NULL,
+    filename VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    local_path VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    shared BOOLEAN NOT NULL,
+    PRIMARY KEY (file_id)
+);
 
--- Data exporting was unselected.
-/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
-/*!40014 SET FOREIGN_KEY_CHECKS=IF(@OLD_FOREIGN_KEY_CHECKS IS NULL, 1, @OLD_FOREIGN_KEY_CHECKS) */;
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+
+ALTER TABLE "dot-files".file OWNER TO ist186428;
+
+--
+-- TOC entry 214 (class 1259 OID 6854341)
+-- Name: file_in_transition; Type: TABLE; Schema: dot-files; Owner: ist186428
+--
+
+CREATE TABLE "dot-files".file_in_transition (
+    username_send VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    file_id SERIAL NOT NULL,
+    username_receive VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    shared_key VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    PRIMARY KEY (username_send, file_id, username_receive),
+    CONSTRAINT "FK_file_in_transition_shared_file" FOREIGN KEY (username_send, file_id) REFERENCES "dot-files".user_file(username, file_id),
+    CONSTRAINT "FK_file_in_transition_r3ds_user" FOREIGN KEY (username_receive) REFERENCES "dot-files".r3ds_user(username)
+);
+
+
+ALTER TABLE "dot-files".file_in_transition OWNER TO ist186428;
+
+--
+-- TOC entry 215 (class 1259 OID 6856811)
+-- Name: log_file; Type: TABLE; Schema: dot-files; Owner: ist186428
+--
+
+CREATE TABLE "dot-files".log_file (
+    file_id SERIAL NOT NULL,
+    date_time TIMESTAMP without time zone NOT NULL,
+    username VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    status "dot-files".log_status NOT NULL,
+    PRIMARY KEY (file_id, date_time),
+    CONSTRAINT "FK_log_file_file" FOREIGN KEY (file_id) REFERENCES "dot-files".file(file_id)
+);
+
+
+ALTER TABLE "dot-files".log_file OWNER TO ist186428;
+
+--
+-- TOC entry 211 (class 1259 OID 6853341)
+-- Name: r3ds_user; Type: TABLE; Schema: dot-files; Owner: ist186428
+--
+
+CREATE TABLE "dot-files".r3ds_user (
+    username VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    password VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    PRIMARY KEY (username)
+);
+
+
+ALTER TABLE "dot-files".r3ds_user OWNER TO ist186428;
+
+--
+-- TOC entry 213 (class 1259 OID 6854212)
+-- Name: user_file; Type: TABLE; Schema: dot-files; Owner: ist186428
+--
+
+CREATE TABLE "dot-files".user_file (
+    username VARCHAR(255) COLLATE pg_catalog."en_US.utf8" NOT NULL,
+    file_id SERIAL NOT NULL,
+    shared_key VARCHAR(255) COLLATE pg_catalog."en_US.utf8",
+    PRIMARY KEY (username, file_id),
+    CONSTRAINT "FK_shared_file_user" FOREIGN KEY (username) REFERENCES "dot-files".r3ds_user(username),
+    CONSTRAINT "FK_shared_file_file" FOREIGN KEY (file_id) REFERENCES "dot-files".file(file_id)
+);
+
+
+ALTER TABLE "dot-files".user_file OWNER TO ist186428;
+
+
+--
+-- TOC entry 2027 (class 1259 OID 6857498)
+-- Name: file_filename_idx; Type: INDEX; Schema: dot-files; Owner: ist186428
+--
+
+CREATE INDEX file_filename_idx ON "dot-files".file USING btree (filename);
+
+
+--
+-- TOC entry 2033 (class 1259 OID 6857497)
+-- Name: file_in_transition_username_receive_idx; Type: INDEX; Schema: dot-files; Owner: ist186428
+--
+
+CREATE INDEX file_in_transition_username_receive_idx ON "dot-files".file_in_transition USING btree (username_receive);
+
+
+--
+-- TOC entry 2030 (class 1259 OID 6857084)
+-- Name: user_file_file_id_idx; Type: INDEX; Schema: dot-files; Owner: ist186428
+--
+
+CREATE INDEX user_file_file_id_idx ON "dot-files".user_file USING btree (file_id);
+
+
+-- Completed on 2019-11-25 09:57:47
+
+--
+-- PostgreSQL database dump complete
+--
+

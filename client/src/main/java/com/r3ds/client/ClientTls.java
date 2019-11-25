@@ -410,13 +410,14 @@ public class ClientTls {
 		StreamObserver<UploadResponse> responseObserver = new StreamObserver<UploadResponse>() {
 			@Override
 			public void onNext(UploadResponse response) {
-				logger.info("Reponse for file upload '{}' received", filePath);
+				logger.info("Response for file upload '{}' received", filePath);
 			}
 
 			@Override
 			public void onError(Throwable t) {
 				logger.warn("Error uploading file to server: {}", t.getMessage());
 				finishLatch.countDown();
+				//throw new ClientException(String.format("%s was not uploaded successfully", filename));
 			}
 
 			@Override

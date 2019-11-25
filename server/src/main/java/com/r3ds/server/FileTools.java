@@ -3,6 +3,7 @@ package com.r3ds.server;
 import com.r3ds.server.file.FileInfo;
 
 import java.sql.*;
+import java.time.LocalDateTime;
 
 public class FileTools {
 	
@@ -78,10 +79,11 @@ public class FileTools {
 	 * @throws SQLException
 	 */
 	public static void logActionInFile(Connection conn, int fileId, String username, LogStatus status) throws SQLException {
-		PreparedStatement stmt = conn.prepareStatement("INSERT INTO log_file(file_id, username, status) " +
-				"VALUES(?, ?, ?)");
+		PreparedStatement stmt = conn.prepareStatement("INSERT INTO log_file(file_id, date_time, username, status) " +
+				"VALUES(?, ?, ?, CAST(? AS log_status))");
 		stmt.setInt(1, fileId);
-		stmt.setString(2, username);
+		stmt.setObject(2, LocalDateTime.now());
+		stmt.setString(3, username);
 		String statusText = "";
 		switch (status) {
 			case CREATE:
@@ -100,7 +102,7 @@ public class FileTools {
 				statusText = "Delete";
 				break;
 		}
-		stmt.setString(3, statusText);
+		stmt.setString(4, statusText);
 		stmt.executeUpdate();
 		stmt.close();
 	}
