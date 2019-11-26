@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import com.r3ds.client.exception.ClientAggregateException;
 import com.r3ds.client.exception.ClientException;
 
 /**
@@ -95,10 +96,15 @@ public class ClientApp
 					switch (command) {
 						case "exit":
 							if (parseEmptyCommand(arguments)) {
-								System.out.println("Exiting...");
-								client.exit();
-								toExit = true;
-								System.out.println("Exit success");
+								try {
+									System.out.println("Exiting...");
+									client.exit();
+								} catch (ClientAggregateException e) {
+									System.out.println(e.getAggregatedMessage());
+								} finally {
+									toExit = true;
+									System.out.println("Exit success");
+								}
 							}
 							break;
 						case "help":
@@ -196,6 +202,8 @@ public class ClientApp
 					}
 				} catch (ClientException e) {
 					System.out.println(e.getMessage());
+				} catch (ClientAggregateException e) {
+					System.out.println(e.getAggregatedMessage());
 				}
 			}
 		} catch (Exception e) {

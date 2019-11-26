@@ -350,14 +350,13 @@ public class CryptoTools {
 	 */
 	public void encrypt(String inPath, String outPath, Key key)
 			throws FileNotFoundException, IOException {
-		try {
+		try (BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(inPath));
+			BufferedOutputStream bWriter = new BufferedOutputStream(new FileOutputStream(outPath)))
+		{
 			byte[] buffer = new byte[getBufferSize()];
 			int read;
 			byte[] mac = computeMac(inPath, key);
 			getCipher().init(Cipher.ENCRYPT_MODE, key, genIv());
-
-			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(inPath));
-			BufferedOutputStream bWriter = new BufferedOutputStream(new FileOutputStream(outPath));
 
 			bWriter.write(mac);
 			bWriter.write(getCipher().getIV());
@@ -369,8 +368,6 @@ public class CryptoTools {
 			}
 			bWriter.write(getCipher().doFinal());
 			bWriter.flush();
-			bWriter.close();
-			bReader.close();
 
 		} catch (InvalidAlgorithmParameterException e) {
 			throw new AssertionError("Error initializing cipher", e);
@@ -393,10 +390,9 @@ public class CryptoTools {
 	 */
 	public void decrypt(String inPath, String outPath, Key key)
 			throws FileNotFoundException, IOException, GeneralSecurityException {
-		try {
-			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(inPath));
-			BufferedOutputStream bWriter = new BufferedOutputStream(new FileOutputStream(outPath));
-
+		try (BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(inPath));
+			BufferedOutputStream bWriter = new BufferedOutputStream(new FileOutputStream(outPath)))
+		{
 			byte[] mac = readMac(bReader);
 			IvParameterSpec iv = readIv(bReader);
 			getCipher().init(Cipher.DECRYPT_MODE, key, iv);
@@ -416,8 +412,6 @@ public class CryptoTools {
 			decipheredData = getCipher().doFinal();
 			bWriter.write(decipheredData);
 			bWriter.flush();
-			bWriter.close();
-			bReader.close();
 
 			byte[] newMac = getMac().doFinal(decipheredData);
 			if (!Arrays.equals(newMac, mac))

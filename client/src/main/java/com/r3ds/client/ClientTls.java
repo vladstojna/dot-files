@@ -2,7 +2,6 @@ package com.r3ds.client;
 
 import com.google.common.hash.Hashing;
 import com.google.protobuf.ByteString;
-
 import com.r3ds.AuthServiceGrpc;
 import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.Common.Credentials;
@@ -13,6 +12,7 @@ import com.r3ds.FileTransfer.UploadResponse;
 import com.r3ds.PingServiceGrpc;
 import com.r3ds.Ping.PingRequest;
 import com.r3ds.Ping.PingResponse;
+import com.r3ds.client.exception.ClientAggregateException;
 import com.r3ds.client.exception.ClientException;
 
 import io.grpc.ManagedChannel;
@@ -39,13 +39,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.SignatureException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.crypto.SecretKey;
 import javax.net.ssl.SSLException;
@@ -55,13 +58,9 @@ import org.slf4j.LoggerFactory;
 
 /** TODO:
  * - list remote files
- * - better exception handling when closing all files, e.g.
- *     if file is manually deleted before closing all, then program won't exit
- *     because exception saying said file does not exist will be thrown
- * - when opening file that does not exist, download it
+ * - ability to add directories (recursively if possible)
  * - when closing file, upload it
  * - delete-local & delete commands
- * - some code cleanup may be necessary
  * - password length, special characters and numbers verification
  */
 
@@ -166,17 +165,18 @@ public class ClientTls {
 	}
 
 	/**
-	 * Closes all files, logs out and exits if the JVM shutsdown
+	 * Closes all files, logs out and exits if the JVM shuts down
 	 */
 	private void addShutdownHook() {
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			@Override
 			public void run() {
 				try {
-					System.err.println("*** shutting down client");
+					System.err.println("\n*** shutting down client");
+					System.err.println("Closing all files and logging out");
 					ClientTls.this.exit();
-				} catch (ClientException e) {
-					e.printStackTrace();
+				} catch (ClientAggregateException e) {
+					System.err.println(e.getAggregatedMessage());
 				} finally {
 					System.err.println("*** done");
 				}
@@ -202,9 +202,12 @@ public class ClientTls {
 	 * Exits the application
 	 * @throws ClientException
 	 */
-	public void exit() throws ClientException {
-		justCloseAll();
-		setLoggedOut();
+	public void exit() throws ClientAggregateException {
+		try {
+			justCloseAll();
+		} finally {
+			setLoggedOut();
+		}
 	}
 
 	/**
@@ -329,14 +332,15 @@ public class ClientTls {
 	 * Logs a user out
 	 * @throws ClientException when the user is already logged out
 	 */
-	public void logout() throws ClientException {
+	public void logout() throws ClientException, ClientAggregateException {
 		if (!isLoggedIn)
 			throw new ClientException("Not logged in");
 
-		logger.info("Request: Logout with username '{}'", this.username);
-		justCloseAll();
-		setLoggedOut();
-		logger.info("Logout successful");
+		try {
+			justCloseAll();
+		} finally {
+			setLoggedOut();
+		}
 	}
 
 	/**
@@ -348,6 +352,7 @@ public class ClientTls {
 		if (!isLoggedIn)
 			throw new ClientException("Not logged in");
 
+		BufferedOutputStream writer = null;
 		try {
 
 			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
@@ -371,13 +376,11 @@ public class ClientTls {
 			Iterator<Chunk> content = downloadBlockingStub.download(request);
 
 			File destinationPath = Paths.get(userPath.toString(), filename).toFile();
-			BufferedOutputStream writer = new BufferedOutputStream(new FileOutputStream(destinationPath));
+			writer = new BufferedOutputStream(new FileOutputStream(destinationPath));
 			while (content.hasNext()) {
 				writer.write(content.next().getContent().toByteArray());
 			}
 			writer.flush();
-			writer.close();
-
 			logger.info("Download of '{}' to '{}' successful", filename, userPath);
 
 		} catch (StatusRuntimeException e) {
@@ -386,6 +389,15 @@ public class ClientTls {
 		} catch (IOException e) {
 			logger.error("Error downloading file", e);
 			throw new ClientException(e.getMessage());
+		} finally {
+			if (writer != null) {
+				try {
+					writer.close();
+				} catch (IOException e) {
+					logger.error("Error cleaning up: {}", e.getMessage());
+					throw new ClientException("Unable to cleanup after error", e);
+				}
+			}
 		}
 	}
 
@@ -406,6 +418,7 @@ public class ClientTls {
 			throw new ClientException(String.format("%s does not exist or is not a file", filePath));
 
 		final CountDownLatch finishLatch = new CountDownLatch(1);
+		final AtomicBoolean errorHappened = new AtomicBoolean(false);
 
 		StreamObserver<UploadResponse> responseObserver = new StreamObserver<UploadResponse>() {
 			@Override
@@ -417,7 +430,7 @@ public class ClientTls {
 			public void onError(Throwable t) {
 				logger.warn("Error uploading file to server: {}", t.getMessage());
 				finishLatch.countDown();
-				//throw new ClientException(String.format("%s was not uploaded successfully", filename));
+				errorHappened.set(true);
 			}
 
 			@Override
@@ -428,9 +441,9 @@ public class ClientTls {
 		};
 
 		StreamObserver<UploadData> requestObserver = uploadStub.upload(responseObserver);
-
+		BufferedInputStream reader = null;
 		try {
-			BufferedInputStream reader = new BufferedInputStream(new FileInputStream(filePath.toFile()));
+			reader = new BufferedInputStream(new FileInputStream(filePath.toFile()));
 			byte[] buffer = new byte[BUFFER_SIZE];
 			int read;
 
@@ -450,11 +463,10 @@ public class ClientTls {
 				);
 				// RPC completed or errored before sending finished
 				if (finishLatch.getCount() == 0) {
-					reader.close();
-					return;
+					throw new ClientException(String.format("Unable to upload %s successfully", filename));
 				}
 			}
-			reader.close();
+
 		} catch (IOException e) {
 			logger.error("Could not read file: {}", e.getMessage());
 			requestObserver.onError(e);
@@ -463,10 +475,22 @@ public class ClientTls {
 			logger.warn("Upload failed: {}", e.getMessage());
 			requestObserver.onError(e);
 			throw new ClientException(String.format("Upload failed: %s", e.getMessage()));
+		} finally {
+			if (reader != null) {
+				try {
+					reader.close();
+				} catch (IOException e) {
+					logger.error("Error cleaning up: {}", e.getMessage());
+					throw new ClientException("Unable to cleanup after error", e);
+				}
+			}
 		}
 
 		requestObserver.onCompleted();
-
+		// if RPC errored after finished sending data
+		if (errorHappened.get() == true) {
+			throw new ClientException(String.format("Unable to upload %s successfully", filename));
+		}
 		// response is received asynchronously
 		finishLatch.await();
 	}
@@ -502,8 +526,6 @@ public class ClientTls {
 			logger.error("Error adding file: ", e.getMessage());
 			throw new ClientException(e.getMessage());
 		}
-
-		logger.info("Success: add {}", pathName);
 	}
 
 	/**
@@ -549,12 +571,13 @@ public class ClientTls {
 			logger.error(e.getMessage());
 			throw new ClientException("Error decrypting file: incorrect secret key or file is corrupted");
 		} finally {
-			try {
-				if (outPath != null)
+			if (outPath != null) {
+				try {
 					Files.deleteIfExists(outPath);
-			} catch (IOException e) {
-				logger.error("Error cleaning up file: {}", e.getMessage());
-				throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
+				} catch (IOException e) {
+					logger.error("Error cleaning up file: {}", e.getMessage());
+					throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
+				}
 			}
 		}
 	}
@@ -585,12 +608,13 @@ public class ClientTls {
 			logger.error("Error closing file: {}", e.getMessage());
 			throw new ClientException(e.getMessage());
 		} finally {
-			try {
-				if (outPath != null)
+			if (outPath != null) {
+				try {
 					Files.deleteIfExists(outPath);
-			} catch (IOException e) {
-				logger.error("Error cleaning up file: {}", e.getMessage());
-				throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
+				} catch (IOException e) {
+					logger.error("Error cleaning up file: {}", e.getMessage());
+					throw new ClientException(String.format("Could not cleanup after error: %s", e.getMessage()));
+				}
 			}
 		}
 	}
@@ -616,17 +640,33 @@ public class ClientTls {
 	 * Closes all files
 	 * @throws ClientException if unable to close a file
 	 */
-	private void justCloseAll() throws ClientException {
-		for (String filename : this.openFiles)
-			justClose(filename);
-		this.openFiles.clear();
+	private void justCloseAll() throws ClientAggregateException {
+		List<Throwable> exceptions = new ArrayList<>();
+		Iterator<String> it = this.openFiles.iterator();
+		while (it.hasNext()) {
+			String filename = it.next();
+			try {
+				justClose(filename);
+			} catch (ClientException e) {
+				logger.warn("Error while closing all files: {}", e.getMessage());
+				exceptions.add(e);
+			} finally {
+				it.remove();
+			}
+		}
+		if (!exceptions.isEmpty()) {
+			throw new ClientAggregateException(
+				String.format("Some files were not properly closed, manually check path %s",
+					Paths.get(SYSTEM_PATH.toString(), this.username)),
+				exceptions);
+		}
 	}
 
 	/**
 	 * Closes all
 	 * @throws ClientException if not logged in, no opened files or unable to close a file
 	 */
-	public void closeAll() throws ClientException {
+	public void closeAll() throws ClientException, ClientAggregateException {
 		if (!isLoggedIn)
 			throw new ClientException("Not logged in");
 		if (this.openFiles.isEmpty())
@@ -646,12 +686,13 @@ public class ClientTls {
 		try {
 			StringBuilder sb = new StringBuilder();
 			Path userPath = Paths.get(SYSTEM_PATH.toString(), this.username);
+			String separator = new String(new char[106]).replace('\0', '-');
 			if (Files.isDirectory(userPath)) {
 				sb.append(String.format(
 					"%-30s| %-10s| %-8s| %-30s| %-20s",
 					"Name", "Type", "State", "Modification Date", "Size (bytes)"))
 				.append('\n')
-				.append(new String(new char[106]).replace('\0', '-'));
+				.append(separator);
 				Iterator<Path> it = Files.list(userPath).iterator();
 				while (it.hasNext()) {
 					sb.append('\n');
@@ -667,6 +708,7 @@ public class ClientTls {
 					sb.append(toAppend);
 				}
 			}
+			sb.append('\n').append(separator);
 			return sb.toString();
 		} catch (IOException e) {
 			logger.error("Unable to list files: {}", e);
