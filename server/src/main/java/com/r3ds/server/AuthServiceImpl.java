@@ -4,6 +4,7 @@ import com.r3ds.Auth;
 import com.r3ds.AuthServiceGrpc;
 import com.r3ds.Common.Credentials;
 import com.r3ds.server.exception.AuthException;
+import com.r3ds.server.exception.DatabaseException;
 import io.grpc.Status;
 
 import java.sql.*;
@@ -20,25 +21,22 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 			System.out.printf("Signup - create account with username %s%n", request.getUsername());
 
 		try {
-			AuthTools.signup(Database.getConnection(), request.getUsername(), request.getPassword());
+			AuthTools authTools = new AuthTools();
+			authTools.signup(request.getUsername(), request.getPassword());
+		} catch (AuthException e) {
+			System.out.println(e.getMessage());
 			responseObserver.onError(Status
 					.ALREADY_EXISTS
 					.withDescription("Username already exists.")
 					.withCause(new AuthException("Username already exists."))
 					.asRuntimeException()
 			);
-		} catch (SQLException e) {
+			return;
+		} catch (DatabaseException e) {
+			e.printStackTrace();
 			responseObserver.onError(Status
 					.INTERNAL
 					.withDescription("Impossible to authenticate. Please try again.")
-					.withCause(e)
-					.asRuntimeException()
-			);
-			return;
-		} catch (AuthException e) {
-			responseObserver.onError(Status
-					.INTERNAL
-					.withDescription(e.getMessage())
 					.withCause(e)
 					.asRuntimeException()
 			);
@@ -59,8 +57,9 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 			System.out.printf("Login - verify if exists account with username %s%n", request.getUsername());
 	
 		try {
-			AuthTools.login(Database.getConnection(), request.getUsername(), request.getPassword());
-		} catch (SQLException e) {
+			AuthTools authTools = new AuthTools();
+			authTools.login(request.getUsername(), request.getPassword());
+		} catch (DatabaseException e) {
 			e.printStackTrace();
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("Impossible to authenticate. Please try again.")

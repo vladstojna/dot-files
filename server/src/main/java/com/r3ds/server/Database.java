@@ -1,5 +1,7 @@
 package com.r3ds.server;
 
+import com.r3ds.server.exception.DatabaseException;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -11,30 +13,25 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 public class Database {
-
-	/**
-	 * Return a connection to DB
-	 *
-	 * @return Connection
-	 * @throws SQLException
-	 */
-	public static Connection getConnection() throws SQLException {
+	private Connection conn;
+	
+	public Database() throws DatabaseException {
 		try (InputStream input = new FileInputStream(
 				new File(Database.class.getProtectionDomain().getCodeSource().getLocation().getPath()).getParent() +
 						"/../src/main/resources/database/config.properties"
 		)) {
 			Properties prop = new Properties();
-
+			
 			// load a properties file
 			prop.load(input);
-
+			
 			// get the property value and print it out
 			String dbHost = prop.getProperty("db.host");
 			String dbName = prop.getProperty("db.name");
 			int dbPort = Integer.parseInt(prop.getProperty("db.port"));
 			String dbUsername = prop.getProperty("db.user");
 			String dbPassword = prop.getProperty("db.pass");
-
+			
 			Class.forName("org.postgresql.Driver");
 			// TODO: ver como usar certificados na ligacao com a base de dados
 			Connection conn = DriverManager.getConnection(
@@ -47,21 +44,31 @@ public class Database {
 			stmt.execute();
 			stmt.close();
 			
-			return conn;
+			this.conn = conn;
+			
 		} catch (IOException | ClassNotFoundException | SQLException e) {
-			System.out.println(e);
-			throw new SQLException("The database connection failed.", e);
+			throw new DatabaseException("The database connection failed.", e);
 		}
 	}
 	
-	public static void closeConnection(Connection conn) {
-		if (conn != null) {
-			try {
-				conn.close();
-			} catch (SQLException e) {
-				/* ignored */
-				System.out.println("Close failure");
-			}
+	/**
+	 * Return a connection to DB
+	 *
+	 * @return Connection
+	 */
+	public Connection getConnection() {
+		return this.conn;
+	}
+	
+	/**
+	 * @throws DatabaseException
+	 */
+	public void closeConnection() throws DatabaseException {
+		try {
+			this.conn.close();
+			this.conn = null;
+		} catch (SQLException e) {
+			throw new DatabaseException("Impossible to close connection.", e);
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package com.r3ds.server;
 
 import com.r3ds.server.exception.AuthException;
+import com.r3ds.server.exception.DatabaseException;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.sql.Connection;
@@ -12,50 +13,81 @@ public class AuthTools {
 	
 	/**
 	 *
-	 * @param conn
 	 * @param username
 	 * @param password
 	 * @throws AuthException
-	 * @throws SQLException
 	 */
-	public static void signup(Connection conn, String username, String password) throws AuthException, SQLException {
+	public void signup(String username, String password) throws AuthException, DatabaseException {
+		Database db = null;
+		PreparedStatement stmt = null;
+		
 		try {
-			PreparedStatement stmt = conn.prepareStatement("INSERT INTO r3ds_user(username, password) VALUES (?, ?)");
+			db = new Database();
+			stmt = db.getConnection()
+					.prepareStatement("INSERT INTO r3ds_user(username, password) VALUES (?, ?)");
 			stmt.setString(1, username);
 			stmt.setString(2, BCrypt.hashpw(password, BCrypt.gensalt()));
 			stmt.executeUpdate();
-			stmt.close();
+			
 		} catch (SQLException e) {
-			if (e.getSQLState().equals("23000"))
+			if (e.getSQLState().equals("23505"))
 				throw new AuthException("There is already an account with that username.", e);
 			else {
-				e.printStackTrace();
-				throw e;
+				throw new DatabaseException("Something happened with database.", e);
 			}
 		} finally {
-			Database.closeConnection(conn);
+			if (stmt != null) {
+				try {
+					stmt.close();
+				} catch (SQLException e) {
+					throw new DatabaseException("Something happened in database", e);
+				}
+			}
+			if (db != null && db.getConnection() != null)
+				db.closeConnection();
 		}
 	}
 	
 	/**
 	 *
-	 * @param conn
 	 * @param username
 	 * @param password
 	 * @throws AuthException
 	 */
-	public static void login(Connection conn, String username, String password) throws AuthException, SQLException {
-		PreparedStatement stmt = conn.prepareStatement("SELECT password " +
-				"FROM r3ds_user " +
-				"WHERE username = ?"
-		);
-		stmt.setString(1, username);
-		ResultSet rs = stmt.executeQuery();
+	public void login(String username, String password) throws AuthException, DatabaseException {
+		Database db = null;
+		PreparedStatement stmt = null;
+		ResultSet rs = null;
 		
-		if (!rs.next() || !BCrypt.checkpw(password, rs.getString("password"))) {
-			rs.close();
-			stmt.close();
-			throw new AuthException("There are no user with that username and password combination.");
+		try {
+			db = new Database();
+			stmt = db.getConnection().prepareStatement("SELECT password " +
+					"FROM r3ds_user " +
+					"WHERE username = ?"
+			);
+			stmt.setString(1, username);
+			rs = stmt.executeQuery();
+			String passwordInDb = null;
+			if (rs.next())
+				passwordInDb = rs.getString("password");
+			
+			if (passwordInDb == null || !BCrypt.checkpw(password, passwordInDb))
+				throw new AuthException("There are no user with that username and password combination.");
+		} catch (SQLException e) {
+			throw new DatabaseException("Something happened with database.", e);
+		} finally {
+			try {
+				if (rs != null)
+					rs.close();
+				
+				if (stmt != null)
+					stmt.close();
+			} catch (SQLException e) {
+				throw new DatabaseException("Something happened with database.", e);
+			}
+			
+			if (db != null && db.getConnection() != null)
+				db.closeConnection();
 		}
 	}
 }

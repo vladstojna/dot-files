@@ -22,6 +22,7 @@ import com.r3ds.FileTransfer.UploadResponse;
 import com.r3ds.FileTransferServiceGrpc.FileTransferServiceImplBase;
 
 import com.r3ds.server.exception.AuthException;
+import com.r3ds.server.exception.DatabaseException;
 import com.r3ds.server.file.FileInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,26 +39,20 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 
 	@Override
 	public void download(DownloadRequest request, StreamObserver<Chunk> responseObserver) {
-		
-		Connection conn = null;
 		try {
-			conn = Database.getConnection();
-			AuthTools.login(
-					Database.getConnection(),
-					request.getCredentials().getUsername(),
-					request.getCredentials().getPassword()
-			);
+			AuthTools authTools = new AuthTools();
+			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
 			
 			logger.info("Download request from '{}' for file '{}'",
 				request.getCredentials().getUsername(), request.getFilename());
 			
 			// check database for path and if user can download it
-			FileInfo fileInfo = FileTools.existFile(conn, request.getCredentials().getUsername(), request.getFilename());
+			FileTools fileTools = new FileTools();
+			FileInfo fileInfo = fileTools.existFileInDB(request.getCredentials().getUsername(), request.getFilename());
 			
-			if (fileInfo.isNullFileInfo())
+			if (fileInfo.isNewFile())
 				throw new FileNotFoundException(String.format("File %s was not found.", request.getFilename()));
 			
-			int fileId = fileInfo.getFileId();
 			String path = fileInfo.getPath();
 
 			BufferedInputStream reader = new BufferedInputStream(
@@ -73,7 +68,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			}
 			reader.close();
 			
-			FileTools.logActionInFile(conn, fileId, request.getCredentials().getUsername(), FileTools.LogStatus.READ);
+			fileTools.getFileToReadFromDB(fileInfo);
 			responseObserver.onCompleted();
 			
 		} catch (AuthException e) {
@@ -82,7 +77,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					.withDescription("You are not logged in.")
 					.withCause(e)
 					.asRuntimeException());
-		} catch (SQLException e) {
+		} catch (DatabaseException e) {
 			e.printStackTrace();
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("Something unexpected happend with DB.")
@@ -94,15 +89,12 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				.withDescription("File not found: " + request.getFilename())
 				.withCause(e)
 				.asRuntimeException());
-
 		} catch (IOException e) {
 			e.printStackTrace();
 			responseObserver.onError(Status.INTERNAL
 				.withDescription("Error downloading file, please try again.")
 				.withCause(e)
 				.asRuntimeException());
-		} finally {
-			Database.closeConnection(conn);
 		}
 	}
 
@@ -171,51 +163,32 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			public void onCompleted() {
 				responseObserver.onNext(UploadResponse.newBuilder().build());
 				
-				Connection conn = null;
 				try {
-					conn = Database.getConnection();
-					
-					AuthTools.login(
-							conn,
+					AuthTools authTools = new AuthTools();
+					authTools.login(
 							lastUploadData.getCredentials().getUsername(),
 							lastUploadData.getCredentials().getPassword()
 					);
 					
 					// check database if file already exists
-					FileInfo fileInfo = FileTools.existFile(
-							conn,
+					FileTools fileTools = new FileTools();
+					FileInfo fileInfo = fileTools.existFileInDB(
 							lastUploadData.getCredentials().getUsername(),
 							lastUploadData.getFilename()
 					);
 					
-					if (fileInfo.isNullFileInfo()) {
+					if (fileInfo.isNewFile()) {
 						// if new, it will save in db
-						int fileId = FileTools.createFileInDB(
-								conn,
-								lastUploadData.getCredentials().getUsername(),
-								lastUploadData.getFilename(),
-								pathToFile
-						);
-						FileTools.logActionInFile(
-								conn,
-								fileId,
-								lastUploadData.getCredentials().getUsername(),
-								FileTools.LogStatus.CREATE
-						);
+						fileTools.createFileInDB(fileInfo, pathToFile);
 					} else {
 						// if already exists
+						fileTools.updateContentFileInDB(fileInfo);
 						pathToFile = fileInfo.getPath();
-						FileTools.logActionInFile(
-								conn,
-								fileInfo.getFileId(),
-								lastUploadData.getCredentials().getUsername(),
-								FileTools.LogStatus.UPDATE_CONTENT
-						);
 					}
 					
 					responseObserver.onCompleted();
 					
-				} catch (SQLException e) {
+				} catch (DatabaseException e) {
 					e.printStackTrace();
 					responseObserver.onError(Status.INTERNAL
 							.withDescription("Error uploading file, please try again.")
@@ -228,16 +201,14 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 							.withCause(e)
 							.asRuntimeException());
 				} finally {
-					Database.closeConnection(conn);
-				}
-				
-				if (writer != null) {
-					try {
-						writer.close();
-					} catch (IOException e) {
-						e.printStackTrace();
-					} finally {
-						writer = null;
+					if (writer != null) {
+						try {
+							writer.close();
+						} catch (IOException e) {
+							e.printStackTrace();
+						} finally {
+							writer = null;
+						}
 					}
 				}
 			}
