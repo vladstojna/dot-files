@@ -1,0 +1,27 @@
+//
+// Protocol buffers definition for certificate signing and retrieving service
+//
+syntax = "proto3";
+package com.r3ds;
+
+message CertificateRequest {
+	string username = 1;
+}
+
+message CertificateResponse {
+	bytes certificate = 1;
+}
+
+message CertificateSignatureRequest {
+	string username = 1;
+	string commonName = 2;
+	bytes publicKey = 3;
+}
+
+message CertificateSignatureResponse {
+}
+
+service CertificateService {
+	rpc sign(CertificateSignatureRequest) returns (CertificateSignatureResponse);
+	rpc retrieve(CertificateRequest) returns (CertificateResponse);
+}
