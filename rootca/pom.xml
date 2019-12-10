@@ -10,7 +10,7 @@
 	</parent>
 
 	<groupId>com.r3ds</groupId>
-	<artifactId>client</artifactId>
+	<artifactId>rootca</artifactId>
 	<packaging>jar</packaging>
 	<version>1.0-SNAPSHOT</version>
 
@@ -24,13 +24,11 @@
 		<exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
 
 		<!-- application properties -->
-		<mainclass>com.r3ds.client.ClientApp</mainclass>
+		<mainclass>com.r3ds.rootca.ServerApp</mainclass>
 
-		<server.host>localhost</server.host>
-		<server.port>8080</server.port>
-		<ca.host>localhost</ca.host>
-		<ca.port>55666</ca.port>
-		<ca.certificate-chain>${project.parent.basedir}/rootca/auth/certificate.pem</ca.certificate-chain>
+		<server.port>55666</server.port>
+		<server.certFilePath>${project.basedir}/auth/certificate.pem</server.certFilePath>
+		<server.privateKeyFilePath>${project.basedir}/auth/key.pem</server.privateKeyFilePath>
 	</properties>
 
 	<dependencies>
@@ -68,11 +66,9 @@
 					<killAfter>-1</killAfter>
 					<mainClass>${mainclass}</mainClass>
 					<arguments>
-						<argument>${server.host}</argument>
 						<argument>${server.port}</argument>
-						<argument>${ca.host}</argument>
-						<argument>${ca.port}</argument>
-						<argument>${ca.certificate-chain}</argument>
+						<argument>${server.certFilePath}</argument>
+						<argument>${server.privateKeyFilePath}</argument>
 					</arguments>
 				</configuration>
 			</plugin>

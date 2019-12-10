@@ -16,10 +16,14 @@ import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.SignatureException;
+import java.security.cert.Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.Random;
@@ -40,8 +44,10 @@ public class CryptoTools {
 
 	/* Default fields */
 	private static final String KDF_ALGO = "PBKDF2WithHmacSHA256";
-	private static final int ITERATIONS = 16 * 1024;
-	private static final int PBE_KEY_LEN = 256;
+	private static final int ITERATIONS = 32 * 1024;
+	private static final int PBE_KEY_LEN = 3072;
+	private static final String KEY_PAIR_ALGO = "RSA";
+	private static final int KEY_PAIR_LEN = 2048;
 	private static final String ENCRYPTION_ALGO = "AES";
 	private static final String ENCRYPTION_MODE = "CBC";
 	private static final String DIGEST_ALGO = "SHA-256";
@@ -53,6 +59,8 @@ public class CryptoTools {
 	private Cipher cipher;
 	private KeyGenerator keyGen;
 	private String kdfAlgo;
+	private String keyPairAlgo;
+	private int keyPairLen;
 	private String encryptionAlgo;
 	private int kdfIterations;
 	private int pbeKeyLen;
@@ -71,6 +79,8 @@ public class CryptoTools {
 	public CryptoTools(String kdfAlgo,
 			int iterations,
 			int keyLen,
+			String keyPairAlgo,
+			int keyPairLen,
 			String encryptionAlgo,
 			String mode,
 			String digestAlgo,
@@ -85,6 +95,8 @@ public class CryptoTools {
 			this.encryptionAlgo = encryptionAlgo;
 			this.kdfIterations = iterations;
 			this.pbeKeyLen = keyLen;
+			this.keyPairAlgo = keyPairAlgo;
+			this.keyPairLen = keyPairLen;
 			this.bufferSize = bufferSize;
 			this.keyGen = null;
 		} catch (NoSuchAlgorithmException | NoSuchPaddingException e) {
@@ -101,6 +113,8 @@ public class CryptoTools {
 		this(KDF_ALGO,
 			ITERATIONS,
 			PBE_KEY_LEN,
+			KEY_PAIR_ALGO,
+			KEY_PAIR_LEN,
 			ENCRYPTION_ALGO,
 			ENCRYPTION_MODE,
 			DIGEST_ALGO,
@@ -116,6 +130,14 @@ public class CryptoTools {
 
 	public String getEncryptionAlgorithm() {
 		return this.encryptionAlgo;
+	}
+
+	public String getKeyPairAlgorithm() {
+		return this.keyPairAlgo;
+	}
+
+	public int getKeyPairLen() {
+		return this.keyPairLen;
 	}
 
 	public int getKdfIterations() {
@@ -150,6 +172,16 @@ public class CryptoTools {
 
 	public CryptoTools setKdfAlgorithm(String algorithm) {
 		this.kdfAlgo = algorithm;
+		return this;
+	}
+
+	public CryptoTools setKeyPairAlgo(String algorithm) {
+		this.keyPairAlgo = algorithm;
+		return this;
+	}
+
+	public CryptoTools setKeyPairLen(int len) {
+		this.keyPairLen = len;
 		return this;
 	}
 
@@ -288,6 +320,91 @@ public class CryptoTools {
 			throw new AssertionError("Error deriving key", e);
 		} finally {
 			spec.clearPassword();
+		}
+	}
+
+	/**
+	 * Derives a key pair from a random secret key
+	 * @param key
+	 * @return
+	 */
+	public KeyPair deriveKeyPair(SecretKey key) {
+		byte[] encodedKey = key.getEncoded();
+		if (encodedKey == null)
+			throw new AssertionError("Error deriving key pair: key does not support encoding");
+		try {
+			SecureRandom rng = new SecureRandom(encodedKey);
+			KeyPairGenerator kpGen = KeyPairGenerator.getInstance(getKeyPairAlgorithm());
+			kpGen.initialize(2048, rng);
+			return kpGen.genKeyPair();
+		} catch (NoSuchAlgorithmException e) {
+			throw new AssertionError("Error deriving key pair", e);
+		} finally {
+			clear(encodedKey);
+		}
+	}
+
+	/**
+	 * Wraps (encrypts) a key using a certificate's public key
+	 * @param toEncrypt
+	 * @param cert
+	 * @return wrapped (encrypted) key
+	 */
+	public byte[] wrapKey(Key toEncrypt, Certificate cert) {
+		try {
+			Cipher cipher = Cipher.getInstance(getKeyPairAlgorithm() + "/ECB/PKCS1Padding");
+			cipher.init(Cipher.WRAP_MODE, cert);
+			return cipher.wrap(toEncrypt);
+		} catch (GeneralSecurityException e) {
+			// should never happen because we are wrapping and padding is requested
+			throw new AssertionError("Error wrapping key", e);
+		}
+	}
+
+	/**
+	 * Wraps (encrypts) a key using a secret key
+	 * @param toEncrypt
+	 * @param encryptionKey
+	 * @return wrapped (encrypted) key
+	 */
+	public byte[] wrapKey(Key toEncrypt, SecretKey encryptionKey) {
+		try {
+			getCipher().init(Cipher.WRAP_MODE, encryptionKey);
+			return getCipher().wrap(toEncrypt);
+		} catch (GeneralSecurityException e) {
+			// should never happen because we are wrapping and padding is requested
+			throw new AssertionError("Error wrapping key", e);
+		}
+	}
+
+	/**
+	 * Unwraps (decrypts) a key with a secret key
+	 * @param toUnwrap
+	 * @param secretKey
+	 * @return unwrapped (decrypted) key
+	 */
+	public Key unwrapKey(byte[] toUnwrap, SecretKey secretKey) {
+		try {
+			getCipher().init(Cipher.UNWRAP_MODE, secretKey);
+			return getCipher().unwrap(toUnwrap, getEncryptionAlgorithm(), Cipher.SECRET_KEY);
+		} catch (NoSuchAlgorithmException | InvalidKeyException e) {
+			throw new AssertionError("Error unwrapping key", e);
+		}
+	}
+
+	/**
+	 * Unwraps (decrypts) a key with a private key
+	 * @param toUnwrap
+	 * @param privateKey
+	 * @return
+	 */
+	public Key unwrapKey(byte[] toUnwrap, PrivateKey privateKey) {
+		try {
+			Cipher cipher = Cipher.getInstance(getKeyPairAlgorithm() + "/ECB/PKCS1Padding");
+			cipher.init(Cipher.WRAP_MODE, privateKey);
+			return cipher.unwrap(toUnwrap, getKeyPairAlgorithm(), Cipher.SECRET_KEY);
+		} catch (NoSuchPaddingException | NoSuchAlgorithmException | InvalidKeyException e) {
+			throw new AssertionError("Error unwrapping key", e);
 		}
 	}
 
