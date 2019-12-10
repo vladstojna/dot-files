@@ -11,8 +11,8 @@ public class ServerApp
 	{
 		System.out.println(ServerApp.class.getSimpleName());
 
-		if (args.length != 3) {
-			System.out.printf("USAGE: java %s port certFilePath privateKeyFilePath%n",
+		if (args.length != 4) {
+			System.out.printf("USAGE: java %s port certFilePath privateKeyFilePath signedCertsPath%n",
 				ServerApp.class.getSimpleName());
 			System.exit(0);
 		}
@@ -20,7 +20,8 @@ public class ServerApp
 		ServerTls server = new ServerTls(
 			Integer.parseInt(args[0]),
 			args[1],
-			args[2]);
+			args[2],
+			args[3]);
 		server.start();
 		server.blockUntilShutdown();
 	}

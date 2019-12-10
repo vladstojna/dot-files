@@ -22,11 +22,16 @@ public class ServerTls {
 	private final int port;
 	private final String certChainFilePath;
 	private final String privateKeyFilePath;
+	private final String signedCertsPath;
 
-	public ServerTls(int port, String certChainFilePath, String privateKeyFilePath) {
+	public ServerTls(int port,
+			String certChainFilePath,
+			String privateKeyFilePath,
+			String signedCertsPath) {
 		this.port = port;
 		this.certChainFilePath = certChainFilePath;
 		this.privateKeyFilePath = privateKeyFilePath;
+		this.signedCertsPath = signedCertsPath;
 	}
 
 	private SslContext getSslContext() throws SSLException {
@@ -46,6 +51,7 @@ public class ServerTls {
 	public void start() throws IOException {
 		server = NettyServerBuilder.forPort(port)
 			.addService(new PingServiceImpl())
+			.addService(new CertificateServiceImpl(signedCertsPath, privateKeyFilePath))
 			.sslContext(getSslContext())
 			.build()
 			.start();
