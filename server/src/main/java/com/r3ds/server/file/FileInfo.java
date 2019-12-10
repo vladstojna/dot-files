@@ -1,30 +1,38 @@
 package com.r3ds.server.file;
 
 public class FileInfo {
-	private String username;
+	private String currentUsername;
+	private String ownerUsername;
+	private int fileId;
 	private String filename;
 	private String previousFilename;
-	private int fileId;
-	private int previousFileId;
 	private String path;
 	private String previousPath;
+	private boolean shared;
+	private boolean previousShared;
 	
-	public FileInfo(String username, String filename, int fileId, String path) {
-		this.username = username;
+	public FileInfo(String currentUsername, String ownerUsername, int fileId, String filename, String path, boolean shared) {
+		this.currentUsername = currentUsername;
+		this.ownerUsername = ownerUsername;
+		this.fileId = fileId;
 		this.filename = filename;
 		this.previousFilename = filename;
-		this.fileId = fileId;
-		this.previousFileId = fileId;
 		this.path = path;
 		this.previousPath = path;
+		this.shared = shared;
+		this.previousShared = shared;
 	}
 	
-	public FileInfo(String username, String filename) {
-		this(username, filename, 0, null);
+	public FileInfo(String currentUsername, String ownerUsername, String filename, boolean shared) {
+		this(currentUsername, ownerUsername, 0, filename, null, shared);
 	}
 	
-	public String getUsername() {
-		return username;
+	public String getCurrentUsername() {
+		return currentUsername;
+	}
+	
+	public String getOwnerUsername() {
+		return ownerUsername;
 	}
 	
 	public String getFilename() {
@@ -47,14 +55,28 @@ public class FileInfo {
 		this.path = path;
 	}
 	
+	public boolean isShared() {
+		return shared;
+	}
+	
+	public void setShared(boolean shared) {
+		this.shared = shared;
+	}
+	
 	public void commit() {
-		this.previousFileId = fileId;
-		this.previousPath = previousPath;
+		if (!this.previousPath.equals(this.path)) {
+			//Files.move(Paths.get(this.path) , Paths.get(this.previousPath), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+		}
+		
+		this.previousPath = this.path;
+		this.previousFilename = this.filename;
+		this.previousShared = this.shared;
 	}
 	
 	public void rollback() {
-		this.fileId = this.previousFileId;
 		this.path = this.previousPath;
+		this.filename = this.previousFilename;
+		this.shared = this.previousShared;
 	}
 	
 	public boolean isNewFile() {

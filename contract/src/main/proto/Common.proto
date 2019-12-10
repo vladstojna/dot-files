@@ -12,3 +12,9 @@ message Credentials {
 message Nonce {
 	uint64 value = 1;
 }
+
+message File {
+    string filename = 1;
+    string ownerUsername = 2;
+    bool shared = 3;
+}

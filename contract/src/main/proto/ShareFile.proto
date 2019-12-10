@@ -1,0 +1,43 @@
+//
+// Protocol buffers definition for share file service
+//
+syntax = "proto3";
+package com.r3ds;
+
+import "Common.proto";
+
+message ShareRequest {
+    Credentials credentials = 1;
+    File file = 2;
+    string receivingUsername = 3;           // user whom file is shared with
+    bytes sharedKeyFromSendingUser = 4;     // shared key ciphered by sending User
+    bytes sharedKeyFromReceivingUser = 5;   // shared key ciphered by receiving User
+}
+
+message ShareResponse {
+}
+
+message GetFilesToShareRequest {
+    Credentials credentials = 1;
+}
+
+message GetFilesToShareResponse {
+    repeated File files = 1;
+}
+
+message FileTotallySharedRequest {
+    Credentials credentials = 1;
+    File file = 2;
+    string sendingUsername = 3;     // user whom file is shared by
+    string sharedKey = 4;           // key from sendingUsername
+}
+
+message FileTotallySharedResponse {
+}
+
+service ShareFileService {
+    rpc shareFile(ShareRequest) returns (ShareResponse);
+
+    rpc getFilesToShare(Credentials) returns (GetFilesToShareResponse);
+    rpc fileTotallyShared(FileTotallySharedRequest) returns (FileTotallySharedResponse);
+}
