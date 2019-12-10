@@ -8,7 +8,7 @@ import "Common.proto";
 
 message ShareRequest {
     Credentials credentials = 1;
-    File file = 2;
+    FileData file = 2;
     string receivingUsername = 3;           // user whom file is shared with
     bytes sharedKeyFromSendingUser = 4;     // shared key ciphered by sending User
     bytes sharedKeyFromReceivingUser = 5;   // shared key ciphered by receiving User
@@ -22,12 +22,12 @@ message GetFilesToShareRequest {
 }
 
 message GetFilesToShareResponse {
-    repeated File files = 1;
+    repeated FileData files = 1;
 }
 
 message FileTotallySharedRequest {
     Credentials credentials = 1;
-    File file = 2;
+    FileData file = 2;
     string sendingUsername = 3;     // user whom file is shared by
     string sharedKey = 4;           // key from sendingUsername
 }

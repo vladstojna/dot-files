@@ -8,7 +8,7 @@ import "Common.proto";
 
 message DownloadRequest {
 	Credentials credentials = 1;
-	File file = 2;
+	FileData file = 2;
 }
 
 message Chunk {
@@ -17,7 +17,7 @@ message Chunk {
 
 message UploadData {
 	Credentials credentials = 1;
-	File file = 2;
+	FileData file = 2;
 	bytes content = 5;
 }
 

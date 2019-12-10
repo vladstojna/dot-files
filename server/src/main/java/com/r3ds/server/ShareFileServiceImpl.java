@@ -104,7 +104,7 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			
 			List<FileInfo> files = fileTools.getFilesToShare(request.getUsername());
 			for (FileInfo file : files) {
-				Common.File.Builder fileBuilder = Common.File.newBuilder();
+				Common.FileData.Builder fileBuilder = Common.FileData.newBuilder();
 				fileBuilder.setOwnerUsername(file.getOwnerUsername());
 				fileBuilder.setFilename(file.getFilename());
 				fileBuilder.setShared(file.isShared());
