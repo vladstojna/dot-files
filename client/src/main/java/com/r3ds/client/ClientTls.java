@@ -5,6 +5,7 @@ import com.google.protobuf.ByteString;
 import com.r3ds.AuthServiceGrpc;
 import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.Common.Credentials;
+import com.r3ds.Common.FileData;
 import com.r3ds.FileTransfer.Chunk;
 import com.r3ds.FileTransfer.DownloadRequest;
 import com.r3ds.FileTransfer.UploadData;
@@ -399,7 +400,11 @@ public class ClientTls {
 					Credentials.newBuilder()
 						.setUsername(this.username)
 						.setPassword(this.passwordHash))
-				.setFilename(filename)
+				.setFile(
+					FileData.newBuilder()
+						.setFilename(filename)
+						.setOwnerUsername(this.username)
+						.setShared(false))
 				.build();
 
 			Iterator<Chunk> content = downloadBlockingStub.download(request);
@@ -483,10 +488,16 @@ public class ClientTls {
 				.setPassword(this.passwordHash)
 				.build();
 
+			FileData fileData = FileData.newBuilder()
+				.setFilename(filename)
+				.setOwnerUsername(this.username)
+				.setShared(false)
+				.build();
+
 			while ((read = reader.read(buffer)) != -1) {
 				requestObserver.onNext(UploadData.newBuilder()
 					.setCredentials(creds)
-					.setFilename(filePath.toFile().getName())
+					.setFile(fileData)
 					.setContent(ByteString.copyFrom(buffer, 0, read))
 					.build()
 				);
