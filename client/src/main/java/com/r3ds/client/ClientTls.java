@@ -51,7 +51,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.crypto.SecretKey;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,10 +72,13 @@ import org.slf4j.LoggerFactory;
  * with TLS.
  */
 public class ClientTls {
+
 	private static final Logger logger = LoggerFactory.getLogger(ClientTls.class);
 
-	private final ManagedChannel channel;
-	private final PingServiceGrpc.PingServiceBlockingStub blockingStub;
+	private final ManagedChannel serverChannel;
+	private final ManagedChannel caChannel;
+	private final PingServiceGrpc.PingServiceBlockingStub pingServerBlockingStub;
+	private final PingServiceGrpc.PingServiceBlockingStub pingCaBlockingStub;
 	private final AuthServiceGrpc.AuthServiceBlockingStub authBlockingStub;
 	private final FileTransferServiceGrpc.FileTransferServiceBlockingStub downloadBlockingStub;
 	private final FileTransferServiceGrpc.FileTransferServiceStub uploadStub;
@@ -95,6 +101,20 @@ public class ClientTls {
 	private Set<String> openFiles;
 
 	/**
+	 * Method created for this project's purposes only: hostnames are always verified as true
+	 */
+	static {
+		HttpsURLConnection.setDefaultHostnameVerifier(
+			new HostnameVerifier(){
+				@Override
+				public boolean verify(String hostname, SSLSession session) {
+					return true;
+				}
+			}
+		);
+	}
+
+	/**
 	 * Builds SSL context
 	 * @param trustCertCollectionFilePath
 	 * @return SSL context
@@ -113,6 +133,22 @@ public class ClientTls {
 	}
 
 	/**
+	 * Builds a secure channel
+	 * @param host
+	 * @param port
+	 * @param trustCertCollectionFilePath
+	 * @return
+	 * @throws SSLException
+	 * @throws ClientException
+	 */
+	private static ManagedChannel buildChannel(String host, int port, String trustCertCollectionFilePath) throws SSLException, ClientException {
+		return NettyChannelBuilder
+			.forAddress(host, port)
+			.sslContext(getSslContext(trustCertCollectionFilePath))
+			.build();
+	}
+
+	/**
 	 * Constructor for client
 	 * @param host
 	 * @param port
@@ -120,11 +156,11 @@ public class ClientTls {
 	 * @throws SSLException if unable to build SSL context
 	 * @throws ClientException
 	 */
-	public ClientTls(String host, int port, String trustCertCollectionFilePath) throws SSLException, ClientException {
-		this(NettyChannelBuilder
-			.forAddress(host, port)
-			.sslContext(getSslContext(trustCertCollectionFilePath))
-			.build());
+	public ClientTls(String host, int port, String caHost, int caPort, String trustCertCollectionFilePath) throws SSLException, ClientException {
+		this(
+			buildChannel(host, port, trustCertCollectionFilePath),
+			buildChannel(caHost, caPort, trustCertCollectionFilePath)
+		);
 	}
 
 	/**
@@ -132,12 +168,25 @@ public class ClientTls {
 	 * @param channel
 	 * @throws ClientException
 	 */
-	private ClientTls(ManagedChannel channel) throws ClientException {
-		this.channel = channel;
-		this.blockingStub = PingServiceGrpc.newBlockingStub(channel);
-		this.authBlockingStub = AuthServiceGrpc.newBlockingStub(channel);
-		this.downloadBlockingStub = FileTransferServiceGrpc.newBlockingStub(channel);
-		this.uploadStub = FileTransferServiceGrpc.newStub(channel);
+	private ClientTls(ManagedChannel serverChannel, ManagedChannel caChannel) throws ClientException {
+		this.serverChannel = serverChannel;
+		this.caChannel = caChannel;
+
+		HttpsURLConnection.setDefaultHostnameVerifier(
+			new HostnameVerifier(){
+				@Override
+				public boolean verify(String hostname, SSLSession session) {
+					return true;
+				}
+			}
+		);
+
+		this.pingServerBlockingStub = PingServiceGrpc.newBlockingStub(serverChannel);
+		this.pingCaBlockingStub = PingServiceGrpc.newBlockingStub(caChannel);
+
+		this.authBlockingStub = AuthServiceGrpc.newBlockingStub(serverChannel);
+		this.downloadBlockingStub = FileTransferServiceGrpc.newBlockingStub(serverChannel);
+		this.uploadStub = FileTransferServiceGrpc.newStub(serverChannel);
 		this.cryptoHelper = new CryptoTools();
 		this.openFiles = new HashSet<>();
 		setLoggedOut();
@@ -195,7 +244,8 @@ public class ClientTls {
 	 * @throws InterruptedException
 	 */
 	public void shutdown() throws InterruptedException {
-		channel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+		serverChannel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
+		caChannel.shutdown().awaitTermination(5, TimeUnit.SECONDS);
 	}
 
 	/**
@@ -220,12 +270,14 @@ public class ClientTls {
 		PingRequest request = PingRequest.newBuilder().setMessage(message).build();
 		PingResponse response;
 		try {
-			response = blockingStub.ping(request);
+			response = pingServerBlockingStub.ping(request);
+			logger.info("Response: {}", response.getMessage());
+			response = pingCaBlockingStub.ping(request);
+			logger.info("Response: {}", response.getMessage());
 		} catch (StatusRuntimeException e) {
 			logger.warn("RPC failed: {}", e.getStatus());
 			throw new ClientException(e.getMessage());
 		}
-		logger.info("Response: {}", response.getMessage());
 	}
 	
 	/**
@@ -715,4 +767,17 @@ public class ClientTls {
 			throw new ClientException("Unable to list files: " + e.getMessage());
 		}
 	}
+
+	public void share(String fileName, String userName) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+		throw new ClientException("Not implemented");
+	}
+
+	public void unshare(String fileName, String userName) throws ClientException {
+		if (!isLoggedIn)
+			throw new ClientException("Not logged in");
+		throw new ClientException("Not implemented");
+	}
+
 }

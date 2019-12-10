@@ -13,20 +13,24 @@ import com.r3ds.client.exception.ClientException;
  */
 public class ClientApp
 {
-	private static boolean parseEmptyCommand(List<String> args) {
-		if (!args.isEmpty()) {
+	private static boolean parseCommand(List<String> args, int numArgs) {
+		if (args.size() != numArgs) {
 			System.out.println("Unknown command, use 'help' to get a list of commands");
 			return false;
 		}
 		return true;
 	}
 
+	private static boolean parseEmptyCommand(List<String> args) {
+		return parseCommand(args, 0);
+	}
+
 	private static boolean parseOneArgumentCommand(List<String> args) {
-		if (args.size() != 1) {
-			System.out.println("Unknown command, use 'help' to get a list of commands");
-			return false;
-		}
-		return true;
+		return parseCommand(args, 1);
+	}
+
+	private static boolean parseTwoArgumentCommand(List<String> args) {
+		return parseCommand(args, 2);
 	}
 
 	private static void printHelp() {
@@ -48,17 +52,19 @@ public class ClientApp
 		System.out.printf("%-10s%-15s%s%n", "open", "[filename]", "decrypts file with name 'filename'");
 		System.out.printf("%-10s%-15s%s%n", "close", "[filename]", "encrypts file with 'filename' (must have been opened previously)");
 		System.out.printf("%-25s%s%n", "closeall", "encrypts all opened files");
-		System.out.println();
-
 		System.out.printf("%-25s%s%n", "list", "lists current user's files");
+		System.out.println();
+		
+		System.out.printf("%-10s%-11s%-10s%s%n", "share", "[filename]", "[user]", "attemps to share file 'filename' with user 'user'");
+		System.out.printf("%-10s%-11s%-10s%s%n", "unshare", "[filename]", "[user]", "attemps to un-share file 'filename' with user 'user'");
 	}
 
 	public static void main(String[] args) throws Exception
 	{
 		System.out.println(ClientApp.class.getSimpleName());
 
-		if (args.length != 3) {
-			System.out.printf("USAGE: java %s host port trustCertCollectionFilePath%n",
+		if (args.length != 5) {
+			System.out.printf("USAGE: java %s serverHost serverPort caHost caPort trustCertCollectionFilePath%n",
 				ClientApp.class.getSimpleName());
 			System.exit(0);
 		}
@@ -66,7 +72,9 @@ public class ClientApp
 		ClientTls client = new ClientTls(
 			args[0],
 			Integer.parseInt(args[1]),
-			args[2]);
+			args[2],
+			Integer.parseInt(args[3]),
+			args[4]);
 
 		try {
 			client.ping("hello server");
@@ -194,6 +202,22 @@ public class ClientApp
 								System.out.println("Listing...");
 								System.out.println(client.list());
 								System.out.println("List success");
+							}
+							break;
+
+						case "share":
+							if (parseTwoArgumentCommand(arguments)) {
+								System.out.printf("Sharing %s with %s...%n", arguments.get(0), arguments.get(1));
+								client.share(arguments.get(0), arguments.get(1));
+								System.out.println("Share success");
+							}
+							break;
+
+						case "unshare":
+							if (parseTwoArgumentCommand(arguments)) {
+								System.out.printf("Sharing %s with %s...%n", arguments.get(0), arguments.get(1));
+								client.unshare(arguments.get(0), arguments.get(1));
+								System.out.println("Share success");
 							}
 							break;
 

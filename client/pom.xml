@@ -28,7 +28,9 @@
 
 		<server.host>localhost</server.host>
 		<server.port>8080</server.port>
-		<client.ca.certificate>${project.parent.basedir}/ca/certificate.pem</client.ca.certificate>
+		<ca.host>localhost</ca.host>
+		<ca.port>55666</ca.port>
+		<ca.certificate-chain>${project.parent.basedir}/rootca/auth/certificate.pem</ca.certificate-chain>
 	</properties>
 
 	<dependencies>
@@ -68,7 +70,9 @@
 					<arguments>
 						<argument>${server.host}</argument>
 						<argument>${server.port}</argument>
-						<argument>${client.ca.certificate}</argument>
+						<argument>${ca.host}</argument>
+						<argument>${ca.port}</argument>
+						<argument>${ca.certificate-chain}</argument>
 					</arguments>
 				</configuration>
 			</plugin>
