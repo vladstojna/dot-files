@@ -6,6 +6,7 @@ import java.nio.file.Path;
 
 import com.google.protobuf.ByteString;
 
+import com.r3ds.FileTransfer;
 import com.r3ds.FileTransfer.Chunk;
 import com.r3ds.FileTransfer.Chunk.Builder;
 import com.r3ds.FileTransfer.DownloadRequest;
@@ -100,6 +101,48 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				.withCause(e)
 				.asRuntimeException());
 		}
+	}
+	
+	/**
+	 *
+	 * @param request
+	 * @param responseObserver
+	 */
+	@Override
+	public void downloadKey(com.r3ds.FileTransfer.DownloadKeyRequest request,
+	                        io.grpc.stub.StreamObserver<com.r3ds.FileTransfer.DownloadKeyResponse> responseObserver) {
+		try {
+			AuthTools authTools = new AuthTools();
+			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
+			
+			FileTools fileTools = new FileTools();
+			FileInfo fileInfo = fileTools.existFileInDB(
+					request.getCredentials().getUsername(),
+					request.getFile().getOwnerUsername(),
+					request.getFile().getFilename(),
+					request.getFile().getShared()
+			);
+			
+			responseObserver.onNext(
+					FileTransfer.DownloadKeyResponse.newBuilder().setSharedKey(
+							ByteString.copyFrom(fileInfo.getSharedKey())
+					).build()
+			);
+			responseObserver.onCompleted();
+		} catch (DatabaseException e) {
+			e.printStackTrace();
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (AuthException e) {
+			logger.info("Username and password provided are not a match.");
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("You are not logged in.")
+					.withCause(e)
+					.asRuntimeException());
+		}
+		
 	}
 
 	@Override

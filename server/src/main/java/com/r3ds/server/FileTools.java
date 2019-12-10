@@ -41,13 +41,13 @@ public class FileTools {
 		
 		try {
 			db = new Database();
-			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.shared, file.local_path " +
+			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.local_path, user_file.shared_key " +
 					"FROM file " +
 					"JOIN user_file ON file.file_id = user_file.file_id " +
 					"WHERE file.owner_username = ? " +
 					"AND file.filename = ? " +
 					"AND file.shared = ?" +
-					"AND user_file.username = ? ");
+					"AND user_file.username = ?");
 			stmt.setString(1, ownerUsername);
 			stmt.setString(2, filename);
 			stmt.setBoolean(3, shared);
@@ -56,6 +56,7 @@ public class FileTools {
 			if (rs.next()) {
 				fileInfo.setFileId(rs.getInt("file_id"));
 				fileInfo.setPath(rs.getString("local_path"));
+				fileInfo.setSharedKey(rs.getBytes("shared_key"));
 			}
 			
 		} catch (SQLException e) {
@@ -189,7 +190,7 @@ public class FileTools {
 					"SET shared_key = ? " +
 					"WHERE username = ? " +
 					"AND file_id = ?");
-			stmt.setString(1, Base64.getEncoder().encode(sharedKeyFromUserSending).toString());
+			stmt.setBytes(1, sharedKeyFromUserSending);
 			stmt.setString(2, usernameSending);
 			stmt.setInt(3, fileInfo.getFileId());
 			stmt.executeUpdate();
@@ -202,7 +203,7 @@ public class FileTools {
 					"VALUES(?, ?, ?)");
 			stmt.setString(1, usernameReceiving);
 			stmt.setInt(2, fileInfo.getFileId());
-			stmt.setNull(3, Types.VARCHAR);
+			stmt.setNull(3, Types.OTHER);
 			stmt.executeUpdate();
 			stmt.close();
 			
@@ -213,7 +214,7 @@ public class FileTools {
 			stmt.setString(1, usernameSending);
 			stmt.setInt(2, fileInfo.getFileId());
 			stmt.setString(3, usernameReceiving);
-			stmt.setString(4, Base64.getEncoder().encode(sharedKeyFromUserReceiving).toString());
+			stmt.setBytes(4, sharedKeyFromUserReceiving);
 			stmt.executeUpdate();
 			stmt.close();
 			
@@ -285,7 +286,7 @@ public class FileTools {
 								rs.getString("filename"),
 								rs.getString("local_path"),
 								rs.getBoolean("shared"),
-								Base64.getDecoder().decode(rs.getString("sharedKey"))
+								rs.getBytes("sharedKey")
 						)
 				);
 			}
@@ -310,10 +311,6 @@ public class FileTools {
 		return files;
 	}
 	
-	public void fileDownloaded(FileInfo fileInfo) {
-	
-	}
-	
 	/**
 	 *
 	 * @param fileInfo
@@ -335,7 +332,7 @@ public class FileTools {
 					"SET shared_key = ? " +
 					"WHERE username = ? " +
 					"AND file_id = ?");
-			stmt.setString(1, Base64.getEncoder().encode(sharedKeyFromUserReceiving).toString());
+			stmt.setBytes(1, sharedKeyFromUserReceiving);
 			stmt.setString(2, usernameReceiving);
 			stmt.setInt(3, fileInfo.getFileId());
 			stmt.executeUpdate();
