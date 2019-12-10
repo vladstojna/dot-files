@@ -6,6 +6,15 @@ package com.r3ds;
 
 import "Common.proto";
 
+message UploadData {
+	Credentials credentials = 1;
+	FileData file = 2;
+	bytes content = 3;
+}
+
+message UploadResponse {
+}
+
 message DownloadRequest {
 	Credentials credentials = 1;
 	FileData file = 2;
@@ -15,16 +24,17 @@ message Chunk {
 	bytes content = 1;
 }
 
-message UploadData {
-	Credentials credentials = 1;
-	FileData file = 2;
-	bytes content = 5;
+message DownloadKeyRequest {
+    Credentials credentials = 1;
+    FileData file = 2;
 }
 
-message UploadResponse {
+message DownloadKeyResponse {
+    bytes sharedKey = 1;
 }
 
 service FileTransferService {
 	rpc upload(stream UploadData) returns (UploadResponse);
 	rpc download(DownloadRequest) returns (stream Chunk);
+	rpc downloadKey(DownloadKeyRequest) returns (DownloadKeyResponse);
 }

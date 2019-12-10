@@ -1,16 +1,12 @@
 package com.r3ds.server;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import com.google.protobuf.ByteString;
 
+import com.r3ds.FileTransfer;
 import com.r3ds.FileTransfer.Chunk;
 import com.r3ds.FileTransfer.Chunk.Builder;
 import com.r3ds.FileTransfer.DownloadRequest;
@@ -106,6 +102,48 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				.asRuntimeException());
 		}
 	}
+	
+	/**
+	 *
+	 * @param request
+	 * @param responseObserver
+	 */
+	@Override
+	public void downloadKey(com.r3ds.FileTransfer.DownloadKeyRequest request,
+	                        io.grpc.stub.StreamObserver<com.r3ds.FileTransfer.DownloadKeyResponse> responseObserver) {
+		try {
+			AuthTools authTools = new AuthTools();
+			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
+			
+			FileTools fileTools = new FileTools();
+			FileInfo fileInfo = fileTools.existFileInDB(
+					request.getCredentials().getUsername(),
+					request.getFile().getOwnerUsername(),
+					request.getFile().getFilename(),
+					request.getFile().getShared()
+			);
+			
+			responseObserver.onNext(
+					FileTransfer.DownloadKeyResponse.newBuilder().setSharedKey(
+							ByteString.copyFrom(fileInfo.getSharedKey())
+					).build()
+			);
+			responseObserver.onCompleted();
+		} catch (DatabaseException e) {
+			e.printStackTrace();
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (AuthException e) {
+			logger.info("Username and password provided are not a match.");
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("You are not logged in.")
+					.withCause(e)
+					.asRuntimeException());
+		}
+		
+	}
 
 	@Override
 	public StreamObserver<UploadData> upload(final StreamObserver<UploadResponse> responseObserver) {
@@ -165,6 +203,8 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			@Override
 			public void onError(Throwable t) {
 				logger.error("Encountered error during upload", t);
+				(new File(pathToFile)).delete();
+				
 				if (writer != null) {
 					try {
 						writer.close();
@@ -209,12 +249,16 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					
 				} catch (DatabaseException e) {
 					e.printStackTrace();
+					(new File(pathToFile)).delete();
+					
 					responseObserver.onError(Status.INTERNAL
 							.withDescription("Error uploading file, please try again.")
 							.withCause(e)
 							.asRuntimeException());
 				} catch (AuthException e) {
 					logger.info("Username and password provided are not a match.");
+					(new File(pathToFile)).delete();
+					
 					responseObserver.onError(Status.INTERNAL
 							.withDescription("You are not logged in.")
 							.withCause(e)

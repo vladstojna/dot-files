@@ -11,7 +11,7 @@ message ShareRequest {
     FileData file = 2;
     string receivingUsername = 3;           // user whom file is shared with
     bytes sharedKeyFromSendingUser = 4;     // shared key ciphered by sending User
-    bytes sharedKeyFromReceivingUser = 5;   // shared key ciphered by receiving User
+    bytes sharedKeyFromReceivingUser = 5;   // shared key ciphered by public key of receiving User
 }
 
 message ShareResponse {
@@ -22,14 +22,19 @@ message GetFilesToShareRequest {
 }
 
 message GetFilesToShareResponse {
-    repeated FileData files = 1;
+    repeated FileDataWithSharedKey files = 1;
+}
+
+message FileDataWithSharedKey {
+    FileData file = 1;
+    bytes sharedKey = 2;                    // shared key ciphered by public key of User requesting the file
 }
 
 message FileTotallySharedRequest {
     Credentials credentials = 1;
     FileData file = 2;
-    string sendingUsername = 3;     // user whom file is shared by
-    string sharedKey = 4;           // key from sendingUsername
+    string sendingUsername = 3;             // user whom file is shared by
+    bytes sharedKey = 4;                    // key from sendingUsername
 }
 
 message FileTotallySharedResponse {
