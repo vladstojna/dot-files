@@ -101,20 +101,6 @@ public class ClientTls {
 	private Set<String> openFiles;
 
 	/**
-	 * Method created for this project's purposes only: hostnames are always verified as true
-	 */
-	static {
-		HttpsURLConnection.setDefaultHostnameVerifier(
-			new HostnameVerifier(){
-				@Override
-				public boolean verify(String hostname, SSLSession session) {
-					return true;
-				}
-			}
-		);
-	}
-
-	/**
 	 * Builds SSL context
 	 * @param trustCertCollectionFilePath
 	 * @return SSL context
@@ -171,15 +157,6 @@ public class ClientTls {
 	private ClientTls(ManagedChannel serverChannel, ManagedChannel caChannel) throws ClientException {
 		this.serverChannel = serverChannel;
 		this.caChannel = caChannel;
-
-		HttpsURLConnection.setDefaultHostnameVerifier(
-			new HostnameVerifier(){
-				@Override
-				public boolean verify(String hostname, SSLSession session) {
-					return true;
-				}
-			}
-		);
 
 		this.pingServerBlockingStub = PingServiceGrpc.newBlockingStub(serverChannel);
 		this.pingCaBlockingStub = PingServiceGrpc.newBlockingStub(caChannel);
