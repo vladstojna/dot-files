@@ -2,6 +2,7 @@ package com.r3ds.client;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -20,12 +21,17 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.SignatureException;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Random;
 
 import javax.crypto.Cipher;
@@ -41,6 +47,8 @@ import javax.crypto.spec.SecretKeySpec;
 public class CryptoTools {
 
 	private static final Random random = new SecureRandom();
+
+	private static final String CERT_TYPE = "X.509";
 
 	/* Default fields */
 	private static final String KDF_ALGO = "PBKDF2WithHmacSHA256";
@@ -580,6 +588,112 @@ public class CryptoTools {
 	 */
 	public static void clear(byte[] array) {
 		Arrays.fill(array, (byte) 0);;
+	}
+
+	/**
+	 * Gets certificate from a path
+	 * @param certPath
+	 * @return
+	 * @throws CertificateException
+	 * @throws FileNotFoundException
+	 */
+	public static Certificate getCertificate(String certPath) throws GeneralSecurityException, FileNotFoundException {
+		return getCertificate(new FileInputStream(certPath));
+	}
+
+	/**
+	 * Gets certificate from an input stream
+	 * @param is
+	 * @return
+	 * @throws CertificateException
+	 */
+	public static Certificate getCertificate(InputStream is) throws GeneralSecurityException {
+		return CertificateFactory.getInstance(CERT_TYPE)
+			.generateCertificate(is);
+	}
+
+	/**
+	 * Gets certificate from byte array
+	 * @param encodedCert
+	 * @return
+	 * @throws CertificateException
+	 */
+	public static Certificate getCertificate(byte[] encodedCert) throws GeneralSecurityException {
+		return CertificateFactory.getInstance(CERT_TYPE)
+			.generateCertificate(new ByteArrayInputStream(encodedCert));
+	}
+
+	/**
+	 * Gets the public key of a certificate
+	 * @param cert
+	 * @return
+	 */
+	public static PublicKey getPublicKey(Certificate cert) {
+		return cert.getPublicKey();
+	}
+
+	/**
+	 * Gets the public key of an encoded certificate
+	 * @param encodedCert
+	 * @return
+	 * @throws CertificateException
+	 */
+	public static PublicKey getPublicKey(byte[] encodedCert) throws GeneralSecurityException {
+		return getCertificate(encodedCert).getPublicKey();
+	}
+
+	/**
+	 * Verifies certificate
+	 * @param cert
+	 * @param pubKey
+	 * @throws CertificateException
+	 * @throws SignatureException
+	 */
+	public static void verifyCertificate(Certificate cert, PublicKey pubKey)
+			throws GeneralSecurityException {
+		try {
+			cert.verify(pubKey);
+		} catch (NoSuchAlgorithmException | NoSuchProviderException | InvalidKeyException e) {
+			throw new AssertionError("Error verifying certificate", e);
+		}
+	}
+
+	/**
+	 * Verifies certificate and returns its public key
+	 * @param cert
+	 * @param pubKey
+	 * @return
+	 * @throws CertificateException
+	 * @throws SignatureException
+	 */
+	public static PublicKey verifyAndGetPublicKey(Certificate cert, PublicKey pubKey)
+			throws GeneralSecurityException {
+		verifyCertificate(cert, pubKey);
+		return cert.getPublicKey();
+	}
+
+	/**
+	 * Verifies encoded certificate and gets its public key
+	 * @param encodedCert
+	 * @param pubKey
+	 * @return
+	 * @throws CertificateException
+	 * @throws SignatureException
+	 */
+	public static PublicKey verifyAndGetPublicKey(byte[] encodedCert, PublicKey pubKey)
+			throws GeneralSecurityException {
+		Certificate cert = getCertificate(encodedCert);
+		verifyCertificate(cert, pubKey);
+		return cert.getPublicKey();
+	}
+
+	/**
+	 * Converts a byte array into a base64-encoded string
+	 * @param src
+	 * @return
+	 */
+	public static String toBase64(byte[] src) {
+		return Base64.getEncoder().encodeToString(src);
 	}
 
 }
