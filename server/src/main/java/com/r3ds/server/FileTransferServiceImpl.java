@@ -2,7 +2,6 @@ package com.r3ds.server;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -10,7 +9,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.*;
 
 import com.google.protobuf.ByteString;
 
@@ -39,19 +37,31 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 
 	@Override
 	public void download(DownloadRequest request, StreamObserver<Chunk> responseObserver) {
+		FileTools fileTools = new FileTools();
+		String fileRelativePath = fileTools.getRelativePathForUsernameAndFilename(
+				request.getFile().getOwnerUsername(),
+				request.getFile().getFilename(),
+				request.getFile().getShared()
+		).toString();
+		
 		try {
 			AuthTools authTools = new AuthTools();
 			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
 			
-			logger.info("Download request from '{}' for file '{}'",
-				request.getCredentials().getUsername(), request.getFilename());
+			logger.info("Download request from '{}' for file '{}' (owner: '{}'; shared: {})",
+				request.getCredentials().getUsername(), request.getFile().getFilename(),
+					request.getFile().getOwnerUsername(), request.getFile().getShared());
 			
 			// check database for path and if user can download it
-			FileTools fileTools = new FileTools();
-			FileInfo fileInfo = fileTools.existFileInDB(request.getCredentials().getUsername(), request.getFilename());
+			FileInfo fileInfo = fileTools.existFileInDB(
+					request.getCredentials().getUsername(),
+					request.getFile().getOwnerUsername(),
+					request.getFile().getFilename(),
+					request.getFile().getShared()
+			);
 			
 			if (fileInfo.isNewFile())
-				throw new FileNotFoundException(String.format("File %s was not found.", request.getFilename()));
+				throw new FileNotFoundException(String.format("File %s was not found.", fileRelativePath));
 			
 			String path = fileInfo.getPath();
 
@@ -68,11 +78,11 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			}
 			reader.close();
 			
-			fileTools.getFileToReadFromDB(fileInfo);
+			fileTools.saveFileReadInLog(fileInfo, request.getCredentials().getUsername());
 			responseObserver.onCompleted();
 			
 		} catch (AuthException e) {
-			System.out.println("Username and password provided are not a match.");
+			logger.info("Username and password provided are not a match.");
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("You are not logged in.")
 					.withCause(e)
@@ -80,13 +90,13 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 		} catch (DatabaseException e) {
 			e.printStackTrace();
 			responseObserver.onError(Status.INTERNAL
-					.withDescription("Something unexpected happend with DB.")
+					.withDescription("Something unexpected happened with DB.")
 					.withCause(e)
 					.asRuntimeException());
 		} catch (FileNotFoundException e) {
 			logger.error("File not found: {}", e.getMessage());
 			responseObserver.onError(Status.INTERNAL
-				.withDescription("File not found: " + request.getFilename())
+				.withDescription("File not found: " + fileRelativePath)
 				.withCause(e)
 				.asRuntimeException());
 		} catch (IOException e) {
@@ -111,22 +121,30 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			@Override
 			public void onNext(UploadData uploadData) {
 				lastUploadData = uploadData;
-				logger.info("Upload chunk #{} from '{}' for file '{}'", callCount,
-					uploadData.getCredentials().getUsername(), uploadData.getFilename());
+				logger.info("Upload chunk #{} from '{}' for file '{}' (owner: '{}'; shared: {})", callCount,
+					uploadData.getCredentials().getUsername(), uploadData.getFile().getFilename(),
+						uploadData.getFile().getOwnerUsername(), uploadData.getFile().getShared());
 				callCount++;
 				
 				
 				try {
-					// temporary path value, user's home
-					Path path = Paths.get(System.getProperty("user.home"), ".r3ds", "server",
-							uploadData.getCredentials().getUsername());
+					FileTools fileTools = new FileTools();
+					Path filePath = fileTools.getLocalPathToDirectoryForUsername(
+							uploadData.getFile().getOwnerUsername(),
+							uploadData.getFile().getShared()
+					);
 					
-					if (!Files.isDirectory(path)) {
-						logger.info("Directory for user '{}' does not exist, creating one", uploadData.getCredentials().getUsername());
-						Files.deleteIfExists(path);
-						Files.createDirectories(path);
+					if (!Files.isDirectory(filePath)) {
+						logger.info("Directory for user '{}' (shared: {}) does not exist, creating one",
+								uploadData.getFile().getOwnerUsername(), uploadData.getFile().getShared());
+						Files.deleteIfExists(filePath);
+						Files.createDirectories(filePath);
 					}
-					pathToFile = Paths.get(path.toString(), uploadData.getFilename()).toString();
+					pathToFile = fileTools.getLocalPathForUsernameAndFilename(
+							uploadData.getFile().getOwnerUsername(),
+							uploadData.getFile().getFilename(),
+							uploadData.getFile().getShared()
+					).toString();
 					
 					byte[] content = uploadData.getContent().toByteArray();
 					
@@ -174,15 +192,17 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					FileTools fileTools = new FileTools();
 					FileInfo fileInfo = fileTools.existFileInDB(
 							lastUploadData.getCredentials().getUsername(),
-							lastUploadData.getFilename()
+							lastUploadData.getFile().getOwnerUsername(),
+							lastUploadData.getFile().getFilename(),
+							lastUploadData.getFile().getShared()
 					);
 					
 					if (fileInfo.isNewFile()) {
 						// if new, it will save in db
-						fileTools.createFileInDB(fileInfo, pathToFile);
+						fileTools.createFileInDB(fileInfo, pathToFile, lastUploadData.getFile().getShared());
 					} else {
 						// if already exists
-						fileTools.updateContentFileInDB(fileInfo);
+						fileTools.saveFileWriteInLog(fileInfo, lastUploadData.getCredentials().getUsername());
 						pathToFile = fileInfo.getPath();
 					}
 					
@@ -195,7 +215,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 							.withCause(e)
 							.asRuntimeException());
 				} catch (AuthException e) {
-					System.out.println("Username and password provided are not a match.");
+					logger.info("Username and password provided are not a match.");
 					responseObserver.onError(Status.INTERNAL
 							.withDescription("You are not logged in.")
 							.withCause(e)
