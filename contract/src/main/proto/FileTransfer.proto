@@ -33,8 +33,15 @@ message DownloadKeyResponse {
     bytes sharedKey = 1;
 }
 
+message ListResponse {
+    repeated FileData files = 1;
+}
+
 service FileTransferService {
 	rpc upload(stream UploadData) returns (UploadResponse);
+
 	rpc download(DownloadRequest) returns (stream Chunk);
 	rpc downloadKey(DownloadKeyRequest) returns (DownloadKeyResponse);
+
+	rpc listFiles(Credentials) returns (ListResponse);
 }

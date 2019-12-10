@@ -298,6 +298,61 @@ public class FileTools {
 	 * @return
 	 * @throws DatabaseException
 	 */
+	public List<FileInfo> getAllFiles(String username) throws DatabaseException {
+		Database db = null;
+		PreparedStatement stmt = null;
+		ResultSet rs = null;
+		
+		List<FileInfo> files = new ArrayList<>();
+		
+		try {
+			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.filename, " +
+					"file.owner_username, file.local_path, file.shared " +
+					"FROM file " +
+					"WHERE username = ?");
+			stmt.setString(1, username);
+			rs = stmt.executeQuery();
+			
+			while (rs.next()) {
+				files.add(
+						new FileInfo(
+								username,
+								rs.getString("owner_username"),
+								rs.getInt("file_id"),
+								rs.getString("filename"),
+								rs.getString("local_path"),
+								rs.getBoolean("shared"),
+								null
+						)
+				);
+			}
+			
+		} catch (SQLException e) {
+			throw new DatabaseException("Something happened in DB.", e);
+		} finally {
+			try {
+				if (rs != null)
+					rs.close();
+				
+				if (stmt != null)
+					stmt.close();
+			} catch (SQLException e) {
+				throw new DatabaseException("Something happened to DB.", e);
+			}
+			
+			if (db != null && db.getConnection() != null)
+				db.closeConnection();
+		}
+		
+		return files;
+	}
+	
+	/**
+	 *
+	 * @param username
+	 * @return
+	 * @throws DatabaseException
+	 */
 	public List<FileInfo> getFilesToShare(String username) throws DatabaseException {
 		Database db = null;
 		PreparedStatement stmt = null;

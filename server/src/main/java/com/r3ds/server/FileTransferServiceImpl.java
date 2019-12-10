@@ -3,9 +3,11 @@ package com.r3ds.server;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import com.google.protobuf.ByteString;
 
+import com.r3ds.Common;
 import com.r3ds.FileTransfer;
 import com.r3ds.FileTransfer.Chunk;
 import com.r3ds.FileTransfer.Chunk.Builder;
@@ -102,11 +104,6 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 		}
 	}
 	
-	/**
-	 *
-	 * @param request
-	 * @param responseObserver
-	 */
 	@Override
 	public void downloadKey(com.r3ds.FileTransfer.DownloadKeyRequest request,
 	                        io.grpc.stub.StreamObserver<com.r3ds.FileTransfer.DownloadKeyResponse> responseObserver) {
@@ -281,5 +278,41 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				}
 			}
 		};
+	}
+	
+	@Override
+	public void listFiles(com.r3ds.Common.Credentials request,
+	                      io.grpc.stub.StreamObserver<com.r3ds.FileTransfer.ListResponse> responseObserver) {
+		try {
+			AuthTools authTools = new AuthTools();
+			authTools.login(request.getUsername(), request.getPassword());
+			
+			FileTransfer.ListResponse.Builder responseBuilder = FileTransfer.ListResponse.newBuilder();
+			
+			FileTools fileTools = new FileTools();
+			List<FileInfo> files = fileTools.getAllFiles(request.getUsername());
+			for (FileInfo file : files) {
+				Common.FileData.Builder fileBuilder = Common.FileData.newBuilder();
+				fileBuilder.setOwnerUsername(file.getOwnerUsername());
+				fileBuilder.setFilename(file.getFilename());
+				fileBuilder.setShared(file.isShared());
+				responseBuilder.addFiles(fileBuilder.build());
+			}
+			
+			responseObserver.onNext(responseBuilder.build());
+			responseObserver.onCompleted();
+		} catch (DatabaseException e) {
+			e.printStackTrace();
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (AuthException e) {
+			logger.info("Username and password provided are not a match.");
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("You are not logged in.")
+					.withCause(e)
+					.asRuntimeException());
+		}
 	}
 }
