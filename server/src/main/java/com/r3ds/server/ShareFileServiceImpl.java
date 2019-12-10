@@ -7,6 +7,7 @@ import com.r3ds.ShareFileServiceGrpc;
 import com.r3ds.server.exception.AuthException;
 import com.r3ds.server.exception.DatabaseException;
 import com.r3ds.server.exception.FileInfoException;
+import com.r3ds.server.exception.UnshareException;
 import com.r3ds.server.file.FileInfo;
 import io.grpc.Status;
 import org.slf4j.Logger;
@@ -95,8 +96,55 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 	 * @param responseObserver
 	 */
 	@Override
+	public void unshareFile(com.r3ds.ShareFile.UnshareRequest request,
+	                        io.grpc.stub.StreamObserver<com.r3ds.ShareFile.UnshareResponse> responseObserver) {
+		AuthTools authTools = new AuthTools();
+		FileTools fileTools = new FileTools();
+		
+		try {
+			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
+			
+			if (!request.getCredentials().getUsername().equals(request.getFile().getOwnerUsername()))
+				throw new UnshareException("The user must be the owner of the file to unshare it.");
+			
+			FileInfo fileInfo = fileTools.existFileInDB(
+					request.getRejectedUsername(),
+					request.getFile().getOwnerUsername(),
+					request.getFile().getFilename(),
+					request.getFile().getShared()
+			);
+			
+			fileTools.unshareFile(fileInfo, request.getRejectedUsername());
+		} catch (UnshareException e) {
+			logger.info("The user ('{}') is not the owner ('{}') of the file.",
+					request.getCredentials().getUsername(), request.getFile().getOwnerUsername());
+			responseObserver.onError(Status.PERMISSION_DENIED
+					.withDescription(e.getMessage())
+					.withCause(e)
+					.asRuntimeException());
+		} catch (DatabaseException e) {
+			e.printStackTrace();
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (AuthException e) {
+			logger.info("Username and password provided are not a match.");
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("You are not logged in.")
+					.withCause(e)
+					.asRuntimeException());
+		}
+	}
+	
+	/**
+	 *
+	 * @param request
+	 * @param responseObserver
+	 */
+	@Override
 	public void getFilesToShare(com.r3ds.Common.Credentials request,
-	                           io.grpc.stub.StreamObserver<com.r3ds.ShareFile.GetFilesToShareResponse> responseObserver) {
+	                            io.grpc.stub.StreamObserver<com.r3ds.ShareFile.GetFilesToShareResponse> responseObserver) {
 		AuthTools authTools = new AuthTools();
 		FileTools fileTools = new FileTools();
 		

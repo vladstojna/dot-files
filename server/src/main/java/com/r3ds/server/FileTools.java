@@ -19,6 +19,7 @@ public class FileTools {
 		UPDATE_CONTENT,
 		SHARED_BY,
 		SHARED_WITH,
+		UNSHARE,
 		DELETE
 	}
 	
@@ -258,6 +259,41 @@ public class FileTools {
 	
 	/**
 	 *
+	 * @param fileInfo
+	 * @param rejectedUsername
+	 * @throws DatabaseException
+	 */
+	public void unshareFile(FileInfo fileInfo, String rejectedUsername) throws DatabaseException {
+		Database db = null;
+		PreparedStatement stmt = null;
+		
+		try {
+			db = new Database();
+			stmt = db.getConnection().prepareStatement("DELETE FROM user_file " +
+					"WHERE username = ? " +
+					"AND file_id = ?");
+			stmt.setString(1, rejectedUsername);
+			stmt.setInt(2, fileInfo.getFileId());
+			stmt.executeUpdate();
+			stmt.close();
+		} catch (SQLException e) {
+			throw new DatabaseException("Something wrong happened with DB.", e);
+		} finally {
+			if (stmt != null) {
+				try {
+					stmt.close();
+				} catch (SQLException e) {
+					throw new DatabaseException("Something happened to DB.", e);
+				}
+			}
+			
+			if (db != null && db.getConnection() != null)
+				db.closeConnection();
+		}
+	}
+	
+	/**
+	 *
 	 * @param username
 	 * @return
 	 * @throws DatabaseException
@@ -436,6 +472,9 @@ public class FileTools {
 					break;
 				case SHARED_WITH:
 					statusText = "Share With";
+					break;
+				case UNSHARE:
+					statusText = "Unshare";
 					break;
 				case DELETE:
 					statusText = "Delete";
