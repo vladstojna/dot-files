@@ -1,4 +1,6 @@
+# ignore project specific files
 config.properties
+rootca/signed
 
 # Compiled class file
 *.class
