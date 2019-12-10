@@ -76,7 +76,7 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 					.asRuntimeException());
 		} catch (FileInfoException e) {
 			logger.error(e.getMessage());
-			responseObserver.onError(Status.ALREADY_EXISTS
+			responseObserver.onError(Status.INTERNAL
 					.withDescription(e.getMessage())
 					.withCause(e)
 					.asRuntimeException());

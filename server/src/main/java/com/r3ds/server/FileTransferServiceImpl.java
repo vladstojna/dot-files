@@ -16,6 +16,7 @@ import com.r3ds.FileTransferServiceGrpc.FileTransferServiceImplBase;
 
 import com.r3ds.server.exception.AuthException;
 import com.r3ds.server.exception.DatabaseException;
+import com.r3ds.server.exception.FileInfoException;
 import com.r3ds.server.file.FileInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,11 +58,9 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			
 			if (fileInfo.isNewFile())
 				throw new FileNotFoundException(String.format("File %s was not found.", fileRelativePath));
-			
-			String path = fileInfo.getPath();
 
 			BufferedInputStream reader = new BufferedInputStream(
-				new FileInputStream(path));
+				new FileInputStream(fileInfo.getPath()));
 			byte[] buffer = new byte[BUFFER_SIZE];
 			int length;
 
@@ -247,6 +246,12 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					
 					responseObserver.onCompleted();
 					
+				} catch (FileInfoException e) {
+					logger.error(e.getMessage());
+					responseObserver.onError(Status.INTERNAL
+							.withDescription(e.getMessage())
+							.withCause(e)
+							.asRuntimeException());
 				} catch (DatabaseException e) {
 					e.printStackTrace();
 					(new File(pathToFile)).delete();
