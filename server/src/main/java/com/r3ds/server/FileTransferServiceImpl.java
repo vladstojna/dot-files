@@ -1,11 +1,6 @@
 package com.r3ds.server;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -165,6 +160,8 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			@Override
 			public void onError(Throwable t) {
 				logger.error("Encountered error during upload", t);
+				(new File(pathToFile)).delete();
+				
 				if (writer != null) {
 					try {
 						writer.close();
@@ -209,12 +206,16 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					
 				} catch (DatabaseException e) {
 					e.printStackTrace();
+					(new File(pathToFile)).delete();
+					
 					responseObserver.onError(Status.INTERNAL
 							.withDescription("Error uploading file, please try again.")
 							.withCause(e)
 							.asRuntimeException());
 				} catch (AuthException e) {
 					logger.info("Username and password provided are not a match.");
+					(new File(pathToFile)).delete();
+					
 					responseObserver.onError(Status.INTERNAL
 							.withDescription("You are not logged in.")
 							.withCause(e)

@@ -9,10 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class FileTools {
 	
@@ -167,7 +164,7 @@ public class FileTools {
 	 * @throws DatabaseException
 	 */
 	public FileInfo shareFile(FileInfo fileInfo, String usernameSending, String usernameReceiving,
-	                          String sharedKeyFromUserSending, String sharedKeyFromUserReceiving)
+	                          byte[] sharedKeyFromUserSending, byte[] sharedKeyFromUserReceiving)
 			throws DatabaseException, FileInfoException {
 		Database db = null;
 		PreparedStatement stmt = null;
@@ -192,7 +189,7 @@ public class FileTools {
 					"SET shared_key = ? " +
 					"WHERE username = ? " +
 					"AND file_id = ?");
-			stmt.setString(1, sharedKeyFromUserSending);
+			stmt.setString(1, Base64.getEncoder().encode(sharedKeyFromUserSending).toString());
 			stmt.setString(2, usernameSending);
 			stmt.setInt(3, fileInfo.getFileId());
 			stmt.executeUpdate();
@@ -216,7 +213,7 @@ public class FileTools {
 			stmt.setString(1, usernameSending);
 			stmt.setInt(2, fileInfo.getFileId());
 			stmt.setString(3, usernameReceiving);
-			stmt.setString(4, sharedKeyFromUserReceiving);
+			stmt.setString(4, Base64.getEncoder().encode(sharedKeyFromUserReceiving).toString());
 			stmt.executeUpdate();
 			stmt.close();
 			
@@ -271,7 +268,8 @@ public class FileTools {
 		List<FileInfo> files = new ArrayList<>();
 		
 		try {
-			stmt = db.getConnection().prepareStatement("SELECT file_id, filename, owner_username, local_path, shared " +
+			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.filename, " +
+						"file.owner_username, file.local_path, file.shared, file_in_transition.shared_key " +
 					"FROM file_in_transition " +
 					"JOIN file ON file_in_transition.file_id = file.file_id " +
 					"WHERE username_receiving = ?");
@@ -286,7 +284,8 @@ public class FileTools {
 								rs.getInt("file_id"),
 								rs.getString("filename"),
 								rs.getString("local_path"),
-								rs.getBoolean("shared")
+								rs.getBoolean("shared"),
+								Base64.getDecoder().decode(rs.getString("sharedKey"))
 						)
 				);
 			}
@@ -311,6 +310,10 @@ public class FileTools {
 		return files;
 	}
 	
+	public void fileDownloaded(FileInfo fileInfo) {
+	
+	}
+	
 	/**
 	 *
 	 * @param fileInfo
@@ -319,7 +322,7 @@ public class FileTools {
 	 * @param sharedKeyFromUserReceiving
 	 */
 	public void fileIsTotallyShared(FileInfo fileInfo, String usernameSending, String usernameReceiving,
-	                                String sharedKeyFromUserReceiving) throws DatabaseException {
+	                                byte[] sharedKeyFromUserReceiving) throws DatabaseException {
 		Database db = null;
 		PreparedStatement stmt = null;
 		
@@ -332,7 +335,7 @@ public class FileTools {
 					"SET shared_key = ? " +
 					"WHERE username = ? " +
 					"AND file_id = ?");
-			stmt.setString(1, sharedKeyFromUserReceiving);
+			stmt.setString(1, Base64.getEncoder().encode(sharedKeyFromUserReceiving).toString());
 			stmt.setString(2, usernameReceiving);
 			stmt.setInt(3, fileInfo.getFileId());
 			stmt.executeUpdate();

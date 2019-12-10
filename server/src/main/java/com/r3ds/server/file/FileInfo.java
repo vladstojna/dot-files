@@ -10,8 +10,11 @@ public class FileInfo {
 	private String previousPath;
 	private boolean shared;
 	private boolean previousShared;
+	private byte[] sharedKey;
+	private byte[] previousSharedKey;
 	
-	public FileInfo(String currentUsername, String ownerUsername, int fileId, String filename, String path, boolean shared) {
+	public FileInfo(String currentUsername, String ownerUsername, int fileId, String filename,
+	                String path, boolean shared, byte[] sharedKey) {
 		this.currentUsername = currentUsername;
 		this.ownerUsername = ownerUsername;
 		this.fileId = fileId;
@@ -21,10 +24,12 @@ public class FileInfo {
 		this.previousPath = path;
 		this.shared = shared;
 		this.previousShared = shared;
+		this.sharedKey = sharedKey;
+		this.previousSharedKey = sharedKey;
 	}
 	
 	public FileInfo(String currentUsername, String ownerUsername, String filename, boolean shared) {
-		this(currentUsername, ownerUsername, 0, filename, null, shared);
+		this(currentUsername, ownerUsername, 0, filename, null, shared, null);
 	}
 	
 	public String getCurrentUsername() {
@@ -63,6 +68,14 @@ public class FileInfo {
 		this.shared = shared;
 	}
 	
+	public byte[] getSharedKey() {
+		return sharedKey;
+	}
+	
+	public void setSharedKey(byte[] sharedKey) {
+		this.sharedKey = sharedKey;
+	}
+	
 	public void commit() {
 		if (!this.previousPath.equals(this.path)) {
 			//Files.move(Paths.get(this.path) , Paths.get(this.previousPath), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
@@ -71,12 +84,14 @@ public class FileInfo {
 		this.previousPath = this.path;
 		this.previousFilename = this.filename;
 		this.previousShared = this.shared;
+		this.previousSharedKey = this.sharedKey;
 	}
 	
 	public void rollback() {
 		this.path = this.previousPath;
 		this.filename = this.previousFilename;
 		this.shared = this.previousShared;
+		this.sharedKey = this.previousSharedKey;
 	}
 	
 	public boolean isNewFile() {

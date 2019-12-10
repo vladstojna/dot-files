@@ -1,5 +1,6 @@
 package com.r3ds.server;
 
+import com.google.protobuf.ByteString;
 import com.r3ds.Common;
 import com.r3ds.ShareFile;
 import com.r3ds.ShareFileServiceGrpc;
@@ -48,7 +49,9 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			).toString());
 			
 			fileTools.shareFile(fileInfo, request.getCredentials().getUsername(), request.getReceivingUsername(),
-					request.getSharedKeyFromSendingUser().toString(), request.getSharedKeyFromReceivingUser().toString());
+					request.getSharedKeyFromSendingUser().toByteArray(),
+					request.getSharedKeyFromReceivingUser().toByteArray()
+			);
 			
 			fileInfo.commit();
 			
@@ -104,11 +107,14 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			
 			List<FileInfo> files = fileTools.getFilesToShare(request.getUsername());
 			for (FileInfo file : files) {
+				ShareFile.FileDataWithSharedKey.Builder fileWithKeyBuilder = ShareFile.FileDataWithSharedKey.newBuilder();
 				Common.FileData.Builder fileBuilder = Common.FileData.newBuilder();
 				fileBuilder.setOwnerUsername(file.getOwnerUsername());
 				fileBuilder.setFilename(file.getFilename());
 				fileBuilder.setShared(file.isShared());
-				responseBuilder.addFiles(fileBuilder.build());
+				fileWithKeyBuilder.setFile(fileBuilder.build());
+				fileWithKeyBuilder.setSharedKey(ByteString.copyFrom(file.getSharedKey()));
+				responseBuilder.addFiles(fileWithKeyBuilder.build());
 			}
 			
 			responseObserver.onNext(responseBuilder.build());
@@ -128,6 +134,11 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 		}
 	}
 	
+	/**
+	 *
+	 * @param request
+	 * @param responseObserver
+	 */
 	@Override
 	public void fileTotallyShared(com.r3ds.ShareFile.FileTotallySharedRequest request,
 	                              io.grpc.stub.StreamObserver<com.r3ds.ShareFile.FileTotallySharedResponse> responseObserver) {
@@ -141,14 +152,14 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 					request.getCredentials().getUsername(),
 					request.getFile().getOwnerUsername(),
 					request.getFile().getFilename(),
-					false
+					true
 			);
 			
 			fileTools.fileIsTotallyShared(
 					fileInfo,
 					request.getSendingUsername(),
 					request.getCredentials().getUsername(),
-					request.getSharedKey()
+					request.getSharedKey().toByteArray()
 			);
 		} catch (DatabaseException e) {
 			e.printStackTrace();
@@ -157,7 +168,7 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 					.withCause(e)
 					.asRuntimeException());
 		} catch (AuthException e) {
-			System.out.println("Username and password provided are not a match.");
+			logger.info("Username and password provided are not a match.");
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("You are not logged in.")
 					.withCause(e)
