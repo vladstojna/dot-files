@@ -45,7 +45,7 @@ public class CryptoTools {
 	/* Default fields */
 	private static final String KDF_ALGO = "PBKDF2WithHmacSHA256";
 	private static final int ITERATIONS = 32 * 1024;
-	private static final int PBE_KEY_LEN = 3072;
+	private static final int PBE_KEY_LEN = 128;
 	private static final String KEY_PAIR_ALGO = "RSA";
 	private static final int KEY_PAIR_LEN = 2048;
 	private static final String ENCRYPTION_ALGO = "AES";

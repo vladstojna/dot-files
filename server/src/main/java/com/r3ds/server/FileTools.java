@@ -1,6 +1,5 @@
 package com.r3ds.server;
 
-import com.r3ds.server.exception.AuthException;
 import com.r3ds.server.exception.DatabaseException;
 import com.r3ds.server.exception.FileInfoException;
 import com.r3ds.server.file.FileInfo;
@@ -86,9 +85,12 @@ public class FileTools {
 	 * @return
 	 * @throws DatabaseException
 	 */
-	public FileInfo createFileInDB(FileInfo fileInfo, String path, boolean shared) throws DatabaseException {
+	public FileInfo createFileInDB(FileInfo fileInfo, String path, boolean shared)
+			throws DatabaseException, FileInfoException {
 		Database db = null;
 		PreparedStatement stmt = null;
+		
+		fileInfo.setPath(path);
 		
 		try {
 			db = new Database();
@@ -112,12 +114,11 @@ public class FileTools {
 			stmt.close();
 			
 			stmt = db.getConnection().prepareStatement("INSERT INTO user_file(username, file_id," +
-					" shared_key, local_path) " +
-					"VALUES(?, ?, ?, ?)");
+					" shared_key) " +
+					"VALUES(?, ?, ?)");
 			stmt.setString(1, fileInfo.getOwnerUsername());
 			stmt.setInt(2, fileId);
-			stmt.setNull(3, Types.VARCHAR);
-			stmt.setString(4, path);
+			stmt.setNull(3, Types.OTHER);
 			stmt.executeUpdate();
 			stmt.close();
 			

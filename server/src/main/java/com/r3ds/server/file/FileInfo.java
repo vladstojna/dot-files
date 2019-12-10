@@ -1,5 +1,11 @@
 package com.r3ds.server.file;
 
+import com.r3ds.server.exception.FileInfoException;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
 public class FileInfo {
 	private String currentUsername;
 	private String ownerUsername;
@@ -76,11 +82,15 @@ public class FileInfo {
 		this.sharedKey = sharedKey;
 	}
 	
-	public void commit() {
-		if (!this.previousPath.equals(this.path)) {
-			//Files.move(Paths.get(this.path) , Paths.get(this.previousPath), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+	public void commit() throws FileInfoException {
+		if (this.previousPath != null && this.path != null && !this.previousPath.equals(this.path)) {
+			try {
+				Files.move(Paths.get(this.path), Paths.get(this.previousPath), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			} catch (IOException e) {
+				throw new FileInfoException("There was an error updating the file in server.", e);
+			}
 		}
-		
+	
 		this.previousPath = this.path;
 		this.previousFilename = this.filename;
 		this.previousShared = this.shared;
