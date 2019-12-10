@@ -1,11 +1,14 @@
 package com.r3ds.rootca;
 
+import com.google.protobuf.ByteString;
 import com.r3ds.CertificateServiceGrpc;
 import com.r3ds.Certification.CertificateSignatureRequest;
 import com.r3ds.Certification.CertificateSignatureResponse;
 import com.r3ds.Certification.CertificateRequest;
 import com.r3ds.Certification.CertificateResponse;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -17,6 +20,9 @@ import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Date;
@@ -45,6 +51,8 @@ public class CertificateServiceImpl extends CertificateServiceGrpc.CertificateSe
 	private static final Logger logger = LoggerFactory.getLogger(CertificateServiceImpl.class);
 
 	private static final SecureRandom secRng = new SecureRandom();
+
+	private static final String CERT_TYPE = "X.509";
 
 	private final String signedCertPath;
 	private final String privateKeyPath;
@@ -149,7 +157,36 @@ public class CertificateServiceImpl extends CertificateServiceGrpc.CertificateSe
 
 	@Override
 	public void retrieve(CertificateRequest request, StreamObserver<CertificateResponse> responseObserver) {
+		String username = request.getUsername();
+		try {
+			logger.info("Retrieving certificate for user '{}'", username);
+			Path certificatePath = Paths.get(signedCertPath, username + ".pem");
+
+			Certificate certificate = CertificateFactory.getInstance(CERT_TYPE)
+				.generateCertificate(new FileInputStream(certificatePath.toString()));
 		
+			CertificateResponse response = CertificateResponse
+				.newBuilder()
+				.setCertificate(ByteString.copyFrom(certificate.getEncoded()))
+				.build();
+
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
+			logger.info("Finished certificate retrieval");
+
+		} catch (FileNotFoundException e) {
+			logger.info("User '{}' does not have a signed certificate", username);
+			responseObserver.onError(Status.NOT_FOUND
+				.withDescription("User '" + username + "' does not have a signed certificate")
+				.withCause(null)
+				.asRuntimeException());
+		} catch (CertificateException e) {
+			logger.info("Error retrieving certificate: {}", e.getMessage());
+			responseObserver.onError(Status.INTERNAL
+				.withDescription("Error retrieving certificate")
+				.withCause(null)
+				.asRuntimeException());
+		}
 	}
 
 }
