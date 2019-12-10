@@ -40,9 +40,20 @@ message FileTotallySharedRequest {
 message FileTotallySharedResponse {
 }
 
+message UnshareRequest {
+    Credentials credentials = 1;
+    string rejectedUsername = 2;
+    FileData file = 3;
+}
+
+message UnshareResponse {
+}
+
 service ShareFileService {
     rpc shareFile(ShareRequest) returns (ShareResponse);
 
     rpc getFilesToShare(Credentials) returns (GetFilesToShareResponse);
     rpc fileTotallyShared(FileTotallySharedRequest) returns (FileTotallySharedResponse);
+
+    rpc unshareFile(UnshareRequest) returns (UnshareResponse);
 }
