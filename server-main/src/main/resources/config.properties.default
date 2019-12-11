@@ -1,0 +1,5 @@
+# define the system directory
+r3ds.path=.r3ds/server
+
+# define the shared files directory
+r3ds.shared.path=shared
