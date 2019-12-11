@@ -39,8 +39,13 @@ public class FileTransferServiceExt extends FileTransferServiceImpl {
 
 	@Override
 	public void download(DownloadRequest request, StreamObserver<Chunk> responseObserver) {
-		super.download(request, responseObserver);
-		logger.info("No replication RPC needed for 'download' operation");
+		IntegrityChecker.lock();
+		try {
+			super.download(request, responseObserver);
+			logger.info("No replication RPC needed for 'download' operation");
+		} finally {
+			IntegrityChecker.unlock();
+		}
 	}
 
 	@Override
@@ -57,11 +62,16 @@ public class FileTransferServiceExt extends FileTransferServiceImpl {
 
 	@Override
 	public StreamObserver<UploadData> upload(final StreamObserver<UploadResponse> responseObserver) {
-		if (BACKUP.compareAndSet(false, true)) {
-			return super.upload(responseObserver);
-		}
-		else {
-			return backupAsyncStub.upload(responseObserver);
+		IntegrityChecker.lock();
+		try {
+			if (BACKUP.compareAndSet(false, true)) {
+				return super.upload(responseObserver);
+			}
+			else {
+				return backupAsyncStub.upload(responseObserver);
+			}
+		} finally {
+			IntegrityChecker.unlock();
 		}
 	}
 }
