@@ -106,7 +106,7 @@ public class CryptoTools {
 			this.keyPairAlgo = keyPairAlgo;
 			this.keyPairLen = keyPairLen;
 			this.bufferSize = bufferSize;
-			this.keyGen = null;
+			initKeyGenerator(encryptionAlgo, keyLen);
 		} catch (NoSuchAlgorithmException | NoSuchPaddingException e) {
 			throw new AssertionError(
 				String.format("%s: error in constructor %s",
@@ -409,7 +409,7 @@ public class CryptoTools {
 	public Key unwrapKey(byte[] toUnwrap, PrivateKey privateKey) {
 		try {
 			Cipher cipher = Cipher.getInstance(getKeyPairAlgorithm() + "/ECB/PKCS1Padding");
-			cipher.init(Cipher.WRAP_MODE, privateKey);
+			cipher.init(Cipher.UNWRAP_MODE, privateKey);
 			return cipher.unwrap(toUnwrap, getKeyPairAlgorithm(), Cipher.SECRET_KEY);
 		} catch (NoSuchPaddingException | NoSuchAlgorithmException | InvalidKeyException e) {
 			throw new AssertionError("Error unwrapping key", e);

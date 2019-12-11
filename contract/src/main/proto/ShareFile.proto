@@ -59,6 +59,10 @@ message IsFileSharedResponse {
     bool isShared = 1;
 }
 
+message IsFileInTransitionResponse {
+    bool isInTransition = 1;
+}
+
 service ShareFileService {
     rpc shareFile(ShareRequest) returns (ShareResponse);
 
@@ -67,5 +71,6 @@ service ShareFileService {
 
     rpc unshareFile(UnshareRequest) returns (UnshareResponse);
 
+    rpc isFileInTransition(IsFileSharedRequest) returns (IsFileInTransitionResponse);
     rpc isFileShared(IsFileSharedRequest) returns (IsFileSharedResponse);
 }
