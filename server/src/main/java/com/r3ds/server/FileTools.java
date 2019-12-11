@@ -323,7 +323,8 @@ public class FileTools {
 			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.filename, " +
 					"file.owner_username, file.local_path, file.shared " +
 					"FROM file " +
-					"WHERE owner_username = ?");
+					"JOIN user_file ON file.file_id = user_file.file_id " +
+					"WHERE user_file.username = ?");
 			stmt.setString(1, username);
 			rs = stmt.executeQuery();
 			
