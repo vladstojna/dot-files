@@ -39,32 +39,30 @@ public class FileTools {
 	 * @param currentUsername
 	 * @param ownerUsername
 	 * @param filename
-	 * @param shared
 	 * @return
 	 * @throws DatabaseException
 	 */
-	public FileInfo existFileInDB(String currentUsername, String ownerUsername, String filename,
-	                              boolean shared) throws DatabaseException {
+	public FileInfo existFileInDB(String currentUsername, String ownerUsername, String filename) throws DatabaseException {
 		PreparedStatement stmt = null;
 		ResultSet rs = null;
-		FileInfo fileInfo = new FileInfo(currentUsername, ownerUsername, filename, shared);
+		FileInfo fileInfo = new FileInfo(currentUsername, ownerUsername, filename);
 		
 		try {
 			db.openConnection();
-			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.local_path, user_file.shared_key " +
+			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.local_path, file.shared," +
+						" user_file.shared_key " +
 					"FROM file " +
 					"JOIN user_file ON file.file_id = user_file.file_id " +
 					"WHERE file.owner_username = ? " +
 					"AND file.filename = ? " +
-					"AND file.shared = ?" +
 					"AND user_file.username = ?");
 			stmt.setString(1, ownerUsername);
 			stmt.setString(2, filename);
-			stmt.setBoolean(3, shared);
-			stmt.setString(4, currentUsername);
+			stmt.setString(3, currentUsername);
 			rs = stmt.executeQuery();
 			if (rs.next()) {
 				fileInfo.setFileId(rs.getInt("file_id"));
+				fileInfo.setShared(rs.getBoolean("shared"));
 				fileInfo.setPath(rs.getString("local_path"));
 				fileInfo.setSharedKey(rs.getBytes("shared_key"));
 			}
@@ -325,7 +323,8 @@ public class FileTools {
 			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.filename, " +
 					"file.owner_username, file.local_path, file.shared " +
 					"FROM file " +
-					"WHERE owner_username = ?");
+					"JOIN user_file ON file.file_id = user_file.file_id " +
+					"WHERE user_file.username = ?");
 			stmt.setString(1, username);
 			rs = stmt.executeQuery();
 			

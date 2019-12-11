@@ -38,6 +38,10 @@ public class FileInfo {
 		this(currentUsername, ownerUsername, 0, filename, null, shared, null);
 	}
 	
+	public FileInfo(String currentUsername, String ownerUsername, String filename) {
+		this(currentUsername, ownerUsername, 0, filename, null, false, null);
+	}
+	
 	public String getCurrentUsername() {
 		return currentUsername;
 	}
