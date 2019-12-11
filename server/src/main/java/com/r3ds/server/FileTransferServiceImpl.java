@@ -35,16 +35,11 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 
 	@Override
 	public void download(DownloadRequest request, StreamObserver<Chunk> responseObserver) {
-		FileTools fileTools = new FileTools();
-		String fileRelativePath = fileTools.getRelativePathForUsernameAndFilename(
-				request.getFile().getOwnerUsername(),
-				request.getFile().getFilename(),
-				request.getFile().getShared()
-		).toString();
-		
 		try {
 			AuthTools authTools = new AuthTools();
 			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
+			
+			FileTools fileTools = new FileTools();
 			
 			logger.info("Download request from '{}' for file '{}' (owner: '{}'; shared: {})",
 				request.getCredentials().getUsername(), request.getFile().getFilename(),
@@ -59,7 +54,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			);
 			
 			if (fileInfo.isNewFile())
-				throw new FileNotFoundException(String.format("File %s was not found.", fileRelativePath));
+				throw new FileNotFoundException(String.format("File %s was not found.", fileInfo.getFilename()));
 
 			BufferedInputStream reader = new BufferedInputStream(
 				new FileInputStream(fileInfo.getPath()));
@@ -91,8 +86,8 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					.asRuntimeException());
 		} catch (FileNotFoundException e) {
 			logger.error("File not found: {}", e.getMessage());
-			responseObserver.onError(Status.INTERNAL
-				.withDescription("File not found: " + fileRelativePath)
+			responseObserver.onError(Status.NOT_FOUND
+				.withDescription("File not found: " + request.getFile().getFilename())
 				.withCause(e)
 				.asRuntimeException());
 		} catch (IOException e) {
@@ -119,6 +114,9 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					request.getFile().getShared()
 			);
 			
+			if (fileInfo.isNewFile())
+				throw new FileNotFoundException(String.format("File %s was not found.", fileInfo.getFilename()));
+			
 			responseObserver.onNext(
 					FileTransfer.DownloadKeyResponse.newBuilder().setSharedKey(
 							ByteString.copyFrom(fileInfo.getSharedKey())
@@ -129,6 +127,12 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			e.printStackTrace();
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (FileNotFoundException e) {
+			logger.error("File not found: {}", e.getMessage());
+			responseObserver.onError(Status.NOT_FOUND
+					.withDescription("File not found: " + request.getFile().getFilename())
 					.withCause(e)
 					.asRuntimeException());
 		} catch (AuthException e) {

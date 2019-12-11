@@ -7,13 +7,14 @@ import com.r3ds.ShareFileServiceGrpc;
 import com.r3ds.server.exception.AuthException;
 import com.r3ds.server.exception.DatabaseException;
 import com.r3ds.server.exception.FileInfoException;
-import com.r3ds.server.exception.UnshareException;
+import com.r3ds.server.exception.ShareException;
 import com.r3ds.server.file.FileInfo;
 import io.grpc.Status;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.util.List;
 
 public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceImplBase {
@@ -42,6 +43,13 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 					request.getFile().getFilename(),
 					false
 			);
+			
+			if (fileInfo.isNewFile())
+				throw new FileNotFoundException(String.format("File %s was not found.", fileInfo.getFilename()));
+			
+			if (!request.getCredentials().getUsername().equals(request.getFile().getOwnerUsername()))
+				throw new ShareException("The user must be the owner of the file to share it.");
+			
 			fileToDeletePath = fileInfo.getPath();
 			
 			fileInfo.setShared(true);
@@ -64,6 +72,13 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			
 			responseObserver.onNext(response);
 			responseObserver.onCompleted();
+		} catch (ShareException e) {
+			logger.info("The user ('{}') is not the owner ('{}') of the file.",
+					request.getCredentials().getUsername(), request.getFile().getOwnerUsername());
+			responseObserver.onError(Status.PERMISSION_DENIED
+					.withDescription(e.getMessage())
+					.withCause(e)
+					.asRuntimeException());
 		} catch (DatabaseException e) {
 			// if happened some error with database, it will not delete the previous file
 			// will only delete the new file because it should not exist
@@ -78,6 +93,12 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 		} catch (FileInfoException e) {
 			logger.error(e.getMessage());
 			responseObserver.onError(Status.INTERNAL
+					.withDescription(e.getMessage())
+					.withCause(e)
+					.asRuntimeException());
+		} catch (FileNotFoundException e) {
+			logger.error(e.getMessage());
+			responseObserver.onError(Status.NOT_FOUND
 					.withDescription(e.getMessage())
 					.withCause(e)
 					.asRuntimeException());
@@ -104,9 +125,6 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 		try {
 			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
 			
-			if (!request.getCredentials().getUsername().equals(request.getFile().getOwnerUsername()))
-				throw new UnshareException("The user must be the owner of the file to unshare it.");
-			
 			FileInfo fileInfo = fileTools.existFileInDB(
 					request.getRejectedUsername(),
 					request.getFile().getOwnerUsername(),
@@ -114,8 +132,14 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 					request.getFile().getShared()
 			);
 			
+			if (fileInfo.isNewFile())
+				throw new FileNotFoundException(String.format("File %s was not found.", fileInfo.getFilename()));
+			
+			if (!request.getCredentials().getUsername().equals(request.getFile().getOwnerUsername()))
+				throw new ShareException("The user must be the owner of the file to unshare it.");
+			
 			fileTools.unshareFile(fileInfo, request.getRejectedUsername());
-		} catch (UnshareException e) {
+		} catch (ShareException e) {
 			logger.info("The user ('{}') is not the owner ('{}') of the file.",
 					request.getCredentials().getUsername(), request.getFile().getOwnerUsername());
 			responseObserver.onError(Status.PERMISSION_DENIED
@@ -126,6 +150,12 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			e.printStackTrace();
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (FileNotFoundException e) {
+			logger.error(e.getMessage());
+			responseObserver.onError(Status.NOT_FOUND
+					.withDescription(e.getMessage())
 					.withCause(e)
 					.asRuntimeException());
 		} catch (AuthException e) {
@@ -203,6 +233,9 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 					true
 			);
 			
+			if (fileInfo.isNewFile())
+				throw new FileNotFoundException(String.format("File %s was not found.", fileInfo.getFilename()));
+			
 			fileTools.fileIsTotallyShared(
 					fileInfo,
 					request.getSendingUsername(),
@@ -213,6 +246,12 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			e.printStackTrace();
 			responseObserver.onError(Status.INTERNAL
 					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (FileNotFoundException e) {
+			logger.error(e.getMessage());
+			responseObserver.onError(Status.NOT_FOUND
+					.withDescription(e.getMessage())
 					.withCause(e)
 					.asRuntimeException());
 		} catch (AuthException e) {
