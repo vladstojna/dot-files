@@ -1,8 +1,14 @@
 # define the system directory
 r3ds.path=.r3ds/files
 
+# define the shared files directory
+r3ds.shared.path=shared
+
 # define the buffer size when reading files
 buffer.size=16384
+
+# define the polling interval of shared file checks in seconds
+polling.interval=60
 
 # define if client is verbose
 verbose=true
