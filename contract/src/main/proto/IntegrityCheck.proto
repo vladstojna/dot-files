@@ -1,0 +1,15 @@
+//
+// Protocol buffers definition for file transfer service
+//
+syntax = "proto3";
+package com.r3ds;
+
+import "Common.proto";
+
+message DownloadBackupRequest {
+	FileData file = 1;
+}
+
+service IntegrityCheckService {
+	rpc downloadBackup(DownloadBackupRequest) returns (stream Chunk);
+}

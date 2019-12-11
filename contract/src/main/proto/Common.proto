@@ -18,3 +18,7 @@ message FileData {
 	string ownerUsername = 2;
 	bool shared = 3;
 }
+
+message Chunk {
+	bytes content = 1;
+}

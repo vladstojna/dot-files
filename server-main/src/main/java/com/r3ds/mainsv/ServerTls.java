@@ -1,6 +1,7 @@
 package com.r3ds.mainsv;
 
 import com.r3ds.FileTransferServiceGrpc;
+import com.r3ds.IntegrityCheckServiceGrpc;
 import com.r3ds.PingServiceGrpc;
 import com.r3ds.ShareFileServiceGrpc;
 import com.r3ds.Ping.PingRequest;
@@ -40,6 +41,7 @@ public class ServerTls {
 	private ShareFileServiceGrpc.ShareFileServiceBlockingStub shareBlockingStub;
 	private FileTransferServiceGrpc.FileTransferServiceBlockingStub fileTransferBlockingStub;
 	private FileTransferServiceGrpc.FileTransferServiceStub fileTransferStub;
+	private IntegrityCheckServiceGrpc.IntegrityCheckServiceBlockingStub integrityStub;
 
 	public ServerTls(
 			int port,
@@ -92,6 +94,7 @@ public class ServerTls {
 		shareBlockingStub = ShareFileServiceGrpc.newBlockingStub(channel);
 		fileTransferBlockingStub = FileTransferServiceGrpc.newBlockingStub(channel);
 		fileTransferStub = FileTransferServiceGrpc.newStub(channel);
+		integrityStub = IntegrityCheckServiceGrpc.newBlockingStub(channel);
 
 		server = NettyServerBuilder.forPort(port)
 			.addService(new PingServiceExt(pingBlockingStub))
@@ -105,6 +108,8 @@ public class ServerTls {
 		logger.info("Server started, listening on " + port);
 
 		pingBlockingStub.ping(PingRequest.newBuilder().setMessage("hello backup, from main").build());
+
+		IntegrityChecker.start(fileTools, integrityStub);
 
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			@Override

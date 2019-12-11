@@ -1,11 +1,10 @@
 package com.r3ds.mainsv;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.Common.Credentials;
-import com.r3ds.FileTransfer.Chunk;
+import com.r3ds.Common.Chunk;
 import com.r3ds.FileTransfer.DownloadKeyRequest;
 import com.r3ds.FileTransfer.DownloadKeyResponse;
 import com.r3ds.FileTransfer.DownloadRequest;

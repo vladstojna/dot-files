@@ -3,7 +3,6 @@ package com.r3ds.backupsv;
 import com.r3ds.server.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Properties;
 import java.util.logging.Logger;
 
@@ -65,6 +64,7 @@ public class ServerTls {
 			.addService(new AuthServiceImpl(authTools))
 			.addService(new FileTransferServiceImpl(authTools, fileTools))
 			.addService(new ShareFileServiceImpl(authTools, fileTools))
+			.addService(new IntegrityCheckServiceImpl(fileTools))
 			.sslContext(getSslContext())
 			.build()
 			.start();

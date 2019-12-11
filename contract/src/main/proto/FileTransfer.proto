@@ -20,10 +20,6 @@ message DownloadRequest {
 	FileData file = 2;
 }
 
-message Chunk {
-	bytes content = 1;
-}
-
 message DownloadKeyRequest {
     Credentials credentials = 1;
     FileData file = 2;
