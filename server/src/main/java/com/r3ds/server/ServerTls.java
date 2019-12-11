@@ -1,7 +1,6 @@
 package com.r3ds.server;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Properties;
 import java.util.logging.Logger;
 
@@ -47,7 +46,7 @@ public class ServerTls {
 	public void start() throws Exception {
 		Database db = createDatabase();
 		AuthTools authTools = new AuthTools(db);
-		FileTools fileTools = new FileTools(db);
+		FileTools fileTools = new FileTools(db, loadConfig());
 		server = NettyServerBuilder.forPort(port)
 			.addService(new PingServiceImpl())
 			.addService(new AuthServiceImpl(authTools))
@@ -66,6 +65,13 @@ public class ServerTls {
 				System.err.println("*** server shut down");
 			}
 		});
+	}
+
+	private Properties loadConfig() throws Exception {
+		String rsrcName = "config.properties";
+		Properties props = new Properties();
+		props.load(ServerTls.class.getClassLoader().getResourceAsStream(rsrcName));
+		return props;
 	}
 
 	private Database createDatabase() throws Exception {

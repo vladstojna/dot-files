@@ -25,8 +25,13 @@ public class FileTools {
 
 	private final Database db;
 
-	public FileTools(Database db) {
+	private final String SYSTEM_PATH;
+	private final String SHARED_PATH;
+
+	public FileTools(Database db, Properties props) {
 		this.db = db;
+		this.SYSTEM_PATH = Paths.get(System.getProperty("user.home"), props.getProperty("r3ds.path")).toString();
+		this.SHARED_PATH = props.getProperty("r3ds.shared.path");
 	}
 	
 	/**
@@ -579,7 +584,7 @@ public class FileTools {
 	 */
 	public Path getRelativePathToDirectoryForUsername(String ownerUsername, boolean shared) {
 		if (shared)
-			return Paths.get("shared", ownerUsername);
+			return Paths.get(SHARED_PATH, ownerUsername);
 		else
 			return Paths.get(ownerUsername);
 	}
@@ -591,7 +596,7 @@ public class FileTools {
 	 * @return
 	 */
 	public Path getLocalPathToDirectoryForUsername(String ownerUsername, boolean shared) {
-		return Paths.get(System.getProperty("user.home"), ".r3ds", "server",
+		return Paths.get(SYSTEM_PATH,
 				getRelativePathToDirectoryForUsername(ownerUsername, shared).toString());
 	}
 	
@@ -604,7 +609,7 @@ public class FileTools {
 	 */
 	public Path getRelativePathForUsernameAndFilename(String ownerUsername, String filename, boolean shared) {
 		if (shared)
-			return Paths.get("shared", ownerUsername, filename);
+			return Paths.get(SHARED_PATH, ownerUsername, filename);
 		else
 			return Paths.get(ownerUsername, filename);
 	}
@@ -617,7 +622,7 @@ public class FileTools {
 	 * @return
 	 */
 	public Path getLocalPathForUsernameAndFilename(String ownerUsername, String filename, boolean shared) {
-		return Paths.get(System.getProperty("user.home"), ".r3ds", "server",
+		return Paths.get(SYSTEM_PATH,
 				getRelativePathForUsernameAndFilename(ownerUsername, filename, shared).toString());
 	}
 }
