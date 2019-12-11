@@ -4,11 +4,15 @@ import com.r3ds.Ping;
 import com.r3ds.PingServiceGrpc;
 import com.r3ds.server.PingServiceImpl;
 
-import io.grpc.Status;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 
 public class PingServiceExt extends PingServiceImpl {
+
+	private Logger logger = LoggerFactory.getLogger(PingServiceExt.class);
 
 	private PingServiceGrpc.PingServiceBlockingStub backupStub;
 
@@ -22,12 +26,9 @@ public class PingServiceExt extends PingServiceImpl {
 		try {
 			super.ping(request, responseObserver);
 			backupStub.ping(request);
+			logger.info("Replication RPC finished");
 		} catch (StatusRuntimeException e) {
-			responseObserver.onError(Status.INTERNAL
-				.withDescription("Ping failed")
-				.withCause(e)
-				.asRuntimeException()
-			);
+			logger.warn("Replication RPC failed: {}", e.getStatus());
 		}
 	}
 }

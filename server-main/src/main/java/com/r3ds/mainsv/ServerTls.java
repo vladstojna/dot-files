@@ -1,11 +1,12 @@
 package com.r3ds.mainsv;
 
+import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.PingServiceGrpc;
+import com.r3ds.ShareFileServiceGrpc;
 import com.r3ds.Ping.PingRequest;
 import com.r3ds.server.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Properties;
 import java.util.logging.Logger;
 
@@ -34,6 +35,11 @@ public class ServerTls {
 	private final String trustCertCollectionPath;
 	private final String backupHost;
 	private final int backupPort;
+
+	private PingServiceGrpc.PingServiceBlockingStub pingBlockingStub;
+	private ShareFileServiceGrpc.ShareFileServiceBlockingStub shareBlockingStub;
+	private FileTransferServiceGrpc.FileTransferServiceBlockingStub fileTransferBlockingStub;
+	private FileTransferServiceGrpc.FileTransferServiceStub fileTransferStub;
 
 	public ServerTls(
 			int port,
@@ -75,26 +81,31 @@ public class ServerTls {
 	public void start() throws Exception {
 		Database db = createDatabase();
 		AuthTools authTools = new AuthTools(db);
-		FileTools fileTools = new FileTools(db);
+		FileTools fileTools = new FileTools(db, loadConfig());
 
 		channel = NettyChannelBuilder.forAddress(backupHost, backupPort)
 			.overrideAuthority("localhost")
 			.sslContext(getClientSslContext())
 			.build();
 
-		PingServiceGrpc.PingServiceBlockingStub pingStub = PingServiceGrpc.newBlockingStub(channel);
-		pingStub.ping(PingRequest.newBuilder().setMessage("hello backup, from main").build());
+		pingBlockingStub = PingServiceGrpc.newBlockingStub(channel);
+		shareBlockingStub = ShareFileServiceGrpc.newBlockingStub(channel);
+		fileTransferBlockingStub = FileTransferServiceGrpc.newBlockingStub(channel);
+		fileTransferStub = FileTransferServiceGrpc.newStub(channel);
 
 		server = NettyServerBuilder.forPort(port)
-			.addService(new PingServiceExt(pingStub))
+			.addService(new PingServiceExt(pingBlockingStub))
 			.addService(new AuthServiceImpl(authTools))
-			.addService(new FileTransferServiceImpl(authTools, fileTools))
-			.addService(new ShareFileServiceImpl(authTools, fileTools))
+			.addService(new FileTransferServiceExt(authTools, fileTools, fileTransferBlockingStub, fileTransferStub))
+			.addService(new ShareServiceExt(authTools, fileTools, shareBlockingStub))
 			.sslContext(getServerSslContext())
 			.build()
 			.start();
 
 		logger.info("Server started, listening on " + port);
+
+		pingBlockingStub.ping(PingRequest.newBuilder().setMessage("hello backup, from main").build());
+
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			@Override
 			public void run() {
@@ -104,6 +115,13 @@ public class ServerTls {
 				System.err.println("*** server shut down");
 			}
 		});
+	}
+
+	private Properties loadConfig() throws Exception {
+		String rsrcName = "config.properties";
+		Properties props = new Properties();
+		props.load(ServerTls.class.getClassLoader().getResourceAsStream(rsrcName));
+		return props;
 	}
 
 	private Database createDatabase() throws Exception {
