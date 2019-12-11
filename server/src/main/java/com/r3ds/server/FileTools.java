@@ -320,7 +320,7 @@ public class FileTools {
 			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.filename, " +
 					"file.owner_username, file.local_path, file.shared " +
 					"FROM file " +
-					"WHERE username = ?");
+					"WHERE owner_username = ?");
 			stmt.setString(1, username);
 			rs = stmt.executeQuery();
 			
