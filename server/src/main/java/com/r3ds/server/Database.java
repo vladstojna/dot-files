@@ -41,7 +41,8 @@ public class Database {
 			stmt.execute();
 			stmt.close();
 		} catch (SQLException | ClassNotFoundException e) {
-			closeConnection();
+			if (this.conn != null)
+				closeConnection();
 			throw new DatabaseException("The database connection failed.", e);
 		}
 	}

@@ -118,6 +118,8 @@ final class FileInfo {
  */
 public class ClientTls {
 
+	private static AtomicBoolean BACKUP = new AtomicBoolean(true);
+
 	private static final Logger logger = LoggerFactory.getLogger(ClientTls.class);
 
 	private final Object loginLock = new Object();
@@ -594,6 +596,9 @@ public class ClientTls {
 					throw new ClientException(String.format("Unable to upload %s successfully", filename));
 				}
 			}
+
+			if (BACKUP.compareAndSet(true, false))
+				upload(filename, owner);
 
 		} catch (IOException e) {
 			logger.error("Could not read file: {}", e.getMessage());
