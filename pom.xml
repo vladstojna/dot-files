@@ -12,6 +12,8 @@
 		<module>contract</module>
 		<module>rootca</module>
 		<module>server</module>
+		<module>server-main</module>
+		<module>server-backup</module>
 		<module>client</module>
 	</modules>
 

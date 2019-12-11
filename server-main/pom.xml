@@ -1,0 +1,99 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.r3ds</groupId>
+		<artifactId>r3ds</artifactId>
+		<version>1.0-SNAPSHOT</version>
+	</parent>
+
+	<groupId>com.r3ds</groupId>
+	<artifactId>mainsv</artifactId>
+	<packaging>jar</packaging>
+	<version>1.0-SNAPSHOT</version>
+
+	<name>${project.artifactId}</name>
+
+	<properties>
+		<!-- compiler properties -->
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
+
+		<!-- application properties -->
+		<mainclass>com.r3ds.mainsv.ServerApp</mainclass>
+
+		<server.port>8080</server.port>
+		<server.certFilePath>${project.basedir}/auth/certificate.pem</server.certFilePath>
+		<server.privateKeyFilePath>${project.basedir}/auth/key.pem</server.privateKeyFilePath>
+		<server.trustCertCollectionPath>${project.parent.basedir}/rootca/auth/certificate.pem</server.trustCertCollectionPath>
+
+		<backup.host>localhost</backup.host>
+		<backup.port>50000</backup.port>
+	</properties>
+
+	<dependencies>
+		<!-- contract brings gRPC dependencies with it -->
+		<dependency>
+			<groupId>com.r3ds</groupId>
+			<artifactId>contract</artifactId>
+			<version>1.0-SNAPSHOT</version>
+		</dependency>
+		<!-- depends on the services -->
+		<dependency>
+			<groupId>com.r3ds</groupId>
+			<artifactId>server</artifactId>
+			<version>1.0-SNAPSHOT</version>
+		</dependency>
+		<!-- JUnit -->
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.12</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- Connector to Postgres -->
+		<!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>42.2.8</version>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Plugin that provides two goals to execute system and Java programs --> 
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>${exec-maven-plugin.version}</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>java</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<!-- to prevent deprecation warning: -->
+					<killAfter>-1</killAfter>
+					<mainClass>${mainclass}</mainClass>
+					<arguments>
+						<argument>${server.port}</argument>
+						<argument>${server.certFilePath}</argument>
+						<argument>${server.privateKeyFilePath}</argument>
+						<argument>${server.trustCertCollectionPath}</argument>
+						<argument>${backup.host}</argument>
+						<argument>${backup.port}</argument>
+					</arguments>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
