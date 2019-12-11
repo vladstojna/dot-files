@@ -9,6 +9,7 @@ import com.r3ds.Common.Credentials;
 import com.r3ds.Common.FileData;
 import com.r3ds.FileTransfer.Chunk;
 import com.r3ds.FileTransfer.DownloadRequest;
+import com.r3ds.FileTransfer.ListResponse;
 import com.r3ds.FileTransfer.UploadData;
 import com.r3ds.FileTransfer.UploadResponse;
 import com.r3ds.PingServiceGrpc;
@@ -110,7 +111,7 @@ final class FileInfo {
 
 	@Override
 	public int hashCode() {
-		return (name.hashCode() << 1) + owner == null ? 0 : owner.hashCode();
+		return (name.hashCode() << 1) + (owner == null ? 0 : owner.hashCode());
 	}
 }
 
@@ -131,8 +132,8 @@ public class ClientTls {
 	private final CertificateServiceGrpc.CertificateServiceBlockingStub certBlockingStub;
 	private final AuthServiceGrpc.AuthServiceBlockingStub authBlockingStub;
 	private final ShareFileServiceGrpc.ShareFileServiceBlockingStub shareBlockingStub;
-	private final FileTransferServiceGrpc.FileTransferServiceBlockingStub downloadBlockingStub;
-	private final FileTransferServiceGrpc.FileTransferServiceStub uploadStub;
+	private final FileTransferServiceGrpc.FileTransferServiceBlockingStub fileTransferBlockingStub;
+	private final FileTransferServiceGrpc.FileTransferServiceStub fileTransferStub;
 
 	private Certificate rootCertificate;
 
@@ -222,8 +223,8 @@ public class ClientTls {
 		this.certBlockingStub = CertificateServiceGrpc.newBlockingStub(caChannel);
 		this.authBlockingStub = AuthServiceGrpc.newBlockingStub(serverChannel);
 		this.shareBlockingStub = ShareFileServiceGrpc.newBlockingStub(serverChannel);
-		this.downloadBlockingStub = FileTransferServiceGrpc.newBlockingStub(serverChannel);
-		this.uploadStub = FileTransferServiceGrpc.newStub(serverChannel);
+		this.fileTransferBlockingStub = FileTransferServiceGrpc.newBlockingStub(serverChannel);
+		this.fileTransferStub = FileTransferServiceGrpc.newStub(serverChannel);
 		this.cryptoHelper = new CryptoTools();
 		this.openFiles = new HashSet<>();
 		setLoggedOut();
@@ -246,7 +247,7 @@ public class ClientTls {
 			BUFFER_SIZE = Integer.parseInt(prop.getProperty("buffer.size"));
 			POLLING_INTERVAL = Integer.parseInt(prop.getProperty("polling.interval"));
 			SYSTEM_PATH = Paths.get(System.getProperty("user.home"), prop.getProperty("r3ds.path"));
-			SHARED_PATH = Paths.get(System.getProperty("user.home"), prop.getProperty("r3ds.shared.path"));
+			SHARED_PATH = Paths.get(prop.getProperty("r3ds.shared.path"));
 		} catch (IOException e) {
 			throw new ClientException(String.format("Could not load properties: %s", e.getMessage()));
 		}
@@ -371,11 +372,13 @@ public class ClientTls {
 	 * @param key
 	 */
 	private void setLoggedIn(String username, String pw, SecretKey key, KeyPair keyPair) {
-		this.username = username;
-		this.passwordHash = pw;
-		this.symmetricKey = key;
-		this.keyPair = keyPair;
-		this.isLoggedIn = true;
+		synchronized(loginLock) {
+			this.username = username;
+			this.passwordHash = pw;
+			this.symmetricKey = key;
+			this.keyPair = keyPair;
+			this.isLoggedIn = true;
+		}
 	}
 
 	/**
@@ -383,13 +386,15 @@ public class ClientTls {
 	 * @throws ClientException when destruction of key is unsuccessful
 	 */
 	private void setLoggedOut() {
-		// Should destroy the key, but destroy() is not overriden
-		// by a password-derived key?
-		this.symmetricKey = null;
-		this.keyPair = null;
-		this.username = null;
-		this.passwordHash = null;
-		this.isLoggedIn = false;
+		synchronized (loginLock) {
+			// Should destroy the key, but destroy() is not overriden
+			// by a password-derived key?
+			this.symmetricKey = null;
+			this.keyPair = null;
+			this.username = null;
+			this.passwordHash = null;
+			this.isLoggedIn = false;
+		}
 	}
 
 	/**
@@ -421,6 +426,8 @@ public class ClientTls {
 
 			authBlockingStub.login(request);
 			setLoggedIn(username, passwordToServer, key, keyPair);
+
+			startSharedCheckerThread();
 
 		} catch (StatusRuntimeException e) {
 			logger.warn("Login failed: {}", e.getMessage());
@@ -476,7 +483,7 @@ public class ClientTls {
 						.setOwnerUsername(owner == null ? this.username : owner)
 						.setShared(owner == null ? false : true))
 				.build();
-			Iterator<Chunk> content = downloadBlockingStub.download(request);
+			Iterator<Chunk> content = fileTransferBlockingStub.download(request);
 
 			Path destDirectory = getDestinationPath(owner);
 			// first time downloading user-wide
@@ -551,7 +558,7 @@ public class ClientTls {
 			}
 		};
 
-		StreamObserver<UploadData> requestObserver = uploadStub.upload(responseObserver);
+		StreamObserver<UploadData> requestObserver = fileTransferStub.upload(responseObserver);
 		BufferedInputStream reader = null;
 		try {
 			reader = new BufferedInputStream(new FileInputStream(filePath.toFile()));
@@ -665,7 +672,7 @@ public class ClientTls {
 
 		Path tempPath = null;
 		try {
-			FileInfo fileInfo = new FileInfo(filename, owner);
+			FileInfo fileInfo = new FileInfo(filename, owner == null ? this.username : owner);
 
 			// check if file with said name exists as regular file
 			Path destDirectory = getDestinationPath(owner);
@@ -680,6 +687,8 @@ public class ClientTls {
 			} else if (openFiles.contains(fileInfo)) {
 				throw new ClientException(String.format("File '%s' is already decrypted", filename));
 			}
+
+			// TODO: download document specific key if file is shared
 
 			tempPath = Paths.get(destDirectory.toString(), filename + "_");
 			cryptoHelper.decrypt(destPath.toString(), tempPath.toString(), this.symmetricKey);
@@ -758,7 +767,7 @@ public class ClientTls {
 	public void close(String filename, String owner) throws ClientException {
 		if (!isLoggedIn)
 			throw new ClientException("Not logged in");
-		FileInfo fileInfo = new FileInfo(filename, owner);
+		FileInfo fileInfo = new FileInfo(filename, owner == null ? this.username : owner);
 		if (openFiles.isEmpty())
 			throw new ClientException("No open files");
 		if (!openFiles.contains(fileInfo))
@@ -820,8 +829,8 @@ public class ClientTls {
 			String separator = new String(new char[106]).replace('\0', '-');
 			if (Files.isDirectory(userPath)) {
 				sb.append(String.format(
-					"%-30s| %-10s| %-8s| %-30s| %-20s",
-					"Name", "Type", "State", "Modification Date", "Size (bytes)"))
+					"%-30s| %-10s| %-8s| %-15s| %-20s",
+					"Name", "Type", "State", "Owner", "Size (bytes)"))
 				.append('\n')
 				.append(separator);
 				Iterator<Path> it = Files.list(userPath).iterator();
@@ -829,15 +838,60 @@ public class ClientTls {
 					sb.append('\n');
 					Path next = it.next();
 					String toAppend = String.format(
-						"%-30s| %-10s| %-8s| %-30s| %-20s",
+						"%-30s| %-10s| %-8s| %-15s| %-20s",
 						next.getFileName().toString(),
 						"LOCAL",
-						//this.openFiles.contains(next.getFileName().toString()) ? "OPEN" : "CLOSED",
-						Files.getLastModifiedTime(next),
+						this.openFiles.contains(new FileInfo(next.getFileName().toString(), this.username)) ?
+							"OPEN" : "CLOSED",
+						this.username,
 						Files.size(next)
 					);
 					sb.append(toAppend);
 				}
+			}
+			Path sharedPath = Paths.get(userPath.toString(), SHARED_PATH.toString());
+			System.out.println(sharedPath);
+			if (Files.isDirectory(sharedPath)) {
+				Iterator<Path> it = Files.list(sharedPath).iterator();
+				while (it.hasNext()) {
+					Path next = it.next();
+					System.out.println(next);
+					if (Files.isDirectory(next)) {
+						Iterator<Path> itInner = Files.list(next).iterator();
+						while (itInner.hasNext()) {
+							sb.append('\n');
+							Path nextInner = itInner.next();
+							String toAppend = String.format(
+								"%-30s| %-10s| %-8s| %-15s| %-20s",
+								nextInner.getFileName().toString(),
+								"LOCAL",
+								this.openFiles.contains(
+									new FileInfo(nextInner.getFileName().toString(), next.getFileName().toString())) ?
+									"OPEN" : "CLOSED",
+								next.getFileName().toString(),
+								Files.size(nextInner)
+							);
+							sb.append(toAppend);
+						}
+					}
+				}
+			}
+			ListResponse remoteFilesResponse = fileTransferBlockingStub.listFiles(
+				Credentials.newBuilder()
+					.setUsername(this.username)
+					.setPassword(this.passwordHash)
+					.build());
+			for (FileData fData : remoteFilesResponse.getFilesList()) {
+				sb.append('\n');
+					String toAppend = String.format(
+						"%-30s| %-10s| %-8s| %-15s| %-20s",
+						fData.getFilename(),
+						"REMOTE",
+						"N/A",
+						fData.getOwnerUsername(),
+						"N/A"
+					);
+					sb.append(toAppend);
 			}
 			sb.append('\n').append(separator);
 			return sb.toString();
@@ -946,16 +1000,33 @@ public class ClientTls {
 		}
 	}
 
-	private void checkShared() {
-		while (isLoggedIn) {
-			try {
-				Credentials creds = Credentials.newBuilder()
-						.setUsername(this.username)
-						.setPassword(this.passwordHash)
-						.build();
+	private void startSharedCheckerThread() {
+		Runnable r = new Runnable(){
+			@Override
+			public void run() {
+				checkShared();
+			}
+		};
+		new Thread(r).start();
+	}
 
-				GetFilesToShareResponse response = shareBlockingStub.getFilesToShare(creds);
-				System.out.println(sharedNotificationMessage(response.getFilesList()));
+	private void checkShared() {
+		while (true) {
+			try {
+				if (isLoggedIn) {
+					Credentials creds = null;
+					synchronized (loginLock) {
+						if (!isLoggedIn)
+							continue;
+						creds = Credentials.newBuilder()
+							.setUsername(this.username)
+							.setPassword(this.passwordHash)
+							.build();
+					}
+					GetFilesToShareResponse response = shareBlockingStub.getFilesToShare(creds);
+					if (response.getFilesCount() > 0)
+						System.out.println(sharedNotificationMessage(response.getFilesList()));
+				}
 				Thread.sleep(1000 * POLLING_INTERVAL);
 			} catch (InterruptedException e) {
 				logger.warn("Shared check interrupted!");
@@ -965,8 +1036,9 @@ public class ClientTls {
 
 	private String sharedNotificationMessage(List<FileDataWithSharedKey> files) {
 		StringBuilder sb = new StringBuilder();
-		String separator = new String(new char[40]).replace('\0', '-');
-		sb.append(separator)
+		String separator = new String(new char[15]).replace('\0', '-');
+		sb.append('\n')
+			.append(separator)
 			.append("Shared Notification Start")
 			.append(separator)
 			.append('\n');
