@@ -7,7 +7,7 @@ import com.r3ds.CertificateServiceGrpc;
 import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.Common.Credentials;
 import com.r3ds.Common.FileData;
-import com.r3ds.FileTransfer.Chunk;
+import com.r3ds.Common.Chunk;
 import com.r3ds.FileTransfer.DownloadRequest;
 import com.r3ds.FileTransfer.ListResponse;
 import com.r3ds.FileTransfer.UploadData;

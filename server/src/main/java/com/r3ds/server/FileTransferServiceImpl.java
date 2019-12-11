@@ -8,9 +8,9 @@ import java.util.List;
 import com.google.protobuf.ByteString;
 
 import com.r3ds.Common;
+import com.r3ds.Common.Chunk;
+import com.r3ds.Common.Chunk.Builder;
 import com.r3ds.FileTransfer;
-import com.r3ds.FileTransfer.Chunk;
-import com.r3ds.FileTransfer.Chunk.Builder;
 import com.r3ds.FileTransfer.DownloadRequest;
 import com.r3ds.FileTransfer.UploadData;
 import com.r3ds.FileTransfer.UploadResponse;
@@ -31,7 +31,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 
 	private final Logger logger = LoggerFactory.getLogger(getClass());
 
-	private static final int BUFFER_SIZE = 4096;
+	private static final int BUFFER_SIZE = 16 * 1024;
 
 	private final AuthTools authTools;
 	private final FileTools fileTools;

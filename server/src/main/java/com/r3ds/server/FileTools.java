@@ -88,6 +88,52 @@ public class FileTools {
 		
 		return fileInfo;
 	}
+
+	/**
+	 * Gets a file
+	 * @param filename
+	 * @param ownerUsername
+	 * @return
+	 * @throws DatabaseException
+	 */
+	public FileInfo getFileInfo(String filename, String ownerUsername) throws DatabaseException{
+		PreparedStatement stmt = null;
+		ResultSet rs = null;
+		FileInfo fileInfo = new FileInfo(null, ownerUsername, filename);
+		
+		try {
+			db.openConnection();
+			stmt = db.getConnection().prepareStatement(
+				"SELECT file_id, local_path FROM file " +
+				"WHERE filename = ? " +
+				"AND owner_username = ?");
+			stmt.setString(1, filename);
+			stmt.setString(2, ownerUsername);
+			rs = stmt.executeQuery();
+			if (rs.next()) {
+				fileInfo.setFileId(rs.getInt("file_id"));
+				fileInfo.setPath(rs.getString("local_path"));
+			}
+			
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw new DatabaseException("Something happened with database", e);
+		} finally {
+			try {
+				if (rs != null)
+					rs.close();
+				if (stmt != null)
+					stmt.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+				throw new DatabaseException("Something happened with database", e);
+			} finally {
+				if (db != null && db.getConnection() != null)
+					db.closeConnection();
+			}
+		}
+		return fileInfo;
+	}
 	
 	/**
 	 *
@@ -362,6 +408,59 @@ public class FileTools {
 		}
 		
 		return files;
+	}
+
+	/**
+	 * Gets a list of all known files
+	 * @return
+	 * @throws DatabaseException
+	 */
+	public List<FileInfo> getAllFiles() throws DatabaseException {
+		PreparedStatement stmt = null;
+		ResultSet rs = null;
+		
+		List<FileInfo> files = new ArrayList<>();
+		
+		try {
+			db.openConnection();
+			stmt = db.getConnection().prepareStatement(
+				"SELECT file_id, filename, owner_username, local_path, shared FROM file"
+			);
+			rs = stmt.executeQuery();
+			
+			while (rs.next()) {
+				files.add(
+						new FileInfo(
+								null,
+								rs.getString("owner_username"),
+								rs.getInt("file_id"),
+								rs.getString("filename"),
+								rs.getString("local_path"),
+								rs.getBoolean("shared"),
+								null
+						)
+				);
+			}
+			return files;
+			
+		} catch (SQLException e) {
+			e.printStackTrace();
+			throw new DatabaseException("Something happened in DB.", e);
+		} finally {
+			try {
+				if (rs != null)
+					rs.close();
+				
+				if (stmt != null)
+					stmt.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+				throw new DatabaseException("Something happened to DB.", e);
+			}
+			
+			if (db != null && db.getConnection() != null)
+				db.closeConnection();
+		}
 	}
 	
 	/**
