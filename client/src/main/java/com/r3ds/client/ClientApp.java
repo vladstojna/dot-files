@@ -160,7 +160,7 @@ public class ClientApp
 						case "download":
 							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Downloading %s...%n", arguments.get(0));
-								client.download(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
+								client.download(arguments.get(0), arguments.size() == 2 ? arguments.get(1) : null);
 								System.out.println("Download success");
 							}
 							break;
@@ -168,7 +168,7 @@ public class ClientApp
 						case "upload":
 							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Uploading %s...%n", arguments.get(0));
-								client.upload(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
+								client.upload(arguments.get(0), arguments.size() == 2 ? arguments.get(1) : null);
 								System.out.println("Upload success");
 							}
 							break;
@@ -184,7 +184,7 @@ public class ClientApp
 						case "open":
 							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Opening %s...%n", arguments.get(0));
-								client.open(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
+								client.open(arguments.get(0), arguments.size() == 2 ? arguments.get(1) : null);
 								System.out.println("Open success");
 							}
 							break;
@@ -192,7 +192,7 @@ public class ClientApp
 						case "close":
 							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Closing %s...%n", arguments.get(0));
-								client.close(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
+								client.close(arguments.get(0), arguments.size() == 2 ? arguments.get(1) : null);
 								System.out.println("Close success");
 							}
 							break;
