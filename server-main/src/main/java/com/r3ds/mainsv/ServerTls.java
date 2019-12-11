@@ -77,15 +77,6 @@ public class ServerTls {
 		AuthTools authTools = new AuthTools(db);
 		FileTools fileTools = new FileTools(db);
 
-		server = NettyServerBuilder.forPort(port)
-			.addService(new PingServiceImpl())
-			.addService(new AuthServiceImpl(authTools))
-			.addService(new FileTransferServiceImpl(authTools, fileTools))
-			.addService(new ShareFileServiceImpl(authTools, fileTools))
-			.sslContext(getServerSslContext())
-			.build()
-			.start();
-
 		channel = NettyChannelBuilder.forAddress(backupHost, backupPort)
 			.overrideAuthority("localhost")
 			.sslContext(getClientSslContext())
@@ -93,6 +84,15 @@ public class ServerTls {
 
 		PingServiceGrpc.PingServiceBlockingStub pingStub = PingServiceGrpc.newBlockingStub(channel);
 		pingStub.ping(PingRequest.newBuilder().setMessage("hello backup, from main").build());
+
+		server = NettyServerBuilder.forPort(port)
+			.addService(new PingServiceExt(pingStub))
+			.addService(new AuthServiceImpl(authTools))
+			.addService(new FileTransferServiceImpl(authTools, fileTools))
+			.addService(new ShareFileServiceImpl(authTools, fileTools))
+			.sslContext(getServerSslContext())
+			.build()
+			.start();
 
 		logger.info("Server started, listening on " + port);
 		Runtime.getRuntime().addShutdownHook(new Thread() {
