@@ -54,8 +54,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			FileInfo fileInfo = fileTools.existFileInDB(
 					request.getCredentials().getUsername(),
 					request.getFile().getOwnerUsername(),
-					request.getFile().getFilename(),
-					request.getFile().getShared()
+					request.getFile().getFilename()
 			);
 			
 			if (fileInfo.isNewFile())
@@ -113,8 +112,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 			FileInfo fileInfo = fileTools.existFileInDB(
 					request.getCredentials().getUsername(),
 					request.getFile().getOwnerUsername(),
-					request.getFile().getFilename(),
-					request.getFile().getShared()
+					request.getFile().getFilename()
 			);
 			
 			if (fileInfo.isNewFile())
@@ -232,8 +230,7 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 					FileInfo fileInfo = fileTools.existFileInDB(
 							lastUploadData.getCredentials().getUsername(),
 							lastUploadData.getFile().getOwnerUsername(),
-							lastUploadData.getFile().getFilename(),
-							lastUploadData.getFile().getShared()
+							lastUploadData.getFile().getFilename()
 					);
 					
 					if (fileInfo.isNewFile()) {
