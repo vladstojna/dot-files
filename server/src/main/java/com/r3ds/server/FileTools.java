@@ -65,6 +65,7 @@ public class FileTools {
 			}
 			
 		} catch (SQLException e) {
+			e.printStackTrace();
 			throw new DatabaseException("Something happened with database", e);
 		} finally {
 			try {
@@ -74,6 +75,7 @@ public class FileTools {
 				if (stmt != null)
 					stmt.close();
 			} catch (SQLException e) {
+				e.printStackTrace();
 				throw new DatabaseException("Something happened with database", e);
 			} finally {
 				if (db != null && db.getConnection() != null)
@@ -143,15 +145,18 @@ public class FileTools {
 					db.getConnection().rollback();
 					fileInfo.rollback();
 				} catch (SQLException ex) {
+					ex.printStackTrace();
 					throw new DatabaseException("Something happened with database.", ex);
 				}
 			}
+			e.printStackTrace();
 			throw new DatabaseException("Something happened with database.", e);
 		} finally {
 			try {
 				if (stmt != null)
 					stmt.close();
 			} catch (SQLException e) {
+				e.printStackTrace();
 				throw new DatabaseException("Something happened with database.", e);
 			}
 			
@@ -239,16 +244,18 @@ public class FileTools {
 				try {
 					db.getConnection().rollback();
 				} catch (SQLException ex) {
+					ex.printStackTrace();
 					throw new DatabaseException("Something wrong happened with DB.", ex);
 				}
 			}
-			
+			e.printStackTrace();
 			throw new DatabaseException("Something wrong happened with DB.", e);
 		} finally {
 			if (stmt != null) {
 				try {
 					stmt.close();
 				} catch (SQLException e) {
+					e.printStackTrace();
 					throw new DatabaseException("Something happened to DB.", e);
 				}
 			}
@@ -279,12 +286,14 @@ public class FileTools {
 			stmt.executeUpdate();
 			stmt.close();
 		} catch (SQLException e) {
+			e.printStackTrace();
 			throw new DatabaseException("Something wrong happened with DB.", e);
 		} finally {
 			if (stmt != null) {
 				try {
 					stmt.close();
 				} catch (SQLException e) {
+					e.printStackTrace();
 					throw new DatabaseException("Something happened to DB.", e);
 				}
 			}
@@ -330,6 +339,7 @@ public class FileTools {
 			}
 			
 		} catch (SQLException e) {
+			e.printStackTrace();
 			throw new DatabaseException("Something happened in DB.", e);
 		} finally {
 			try {
@@ -339,6 +349,7 @@ public class FileTools {
 				if (stmt != null)
 					stmt.close();
 			} catch (SQLException e) {
+				e.printStackTrace();
 				throw new DatabaseException("Something happened to DB.", e);
 			}
 			
@@ -367,7 +378,7 @@ public class FileTools {
 						"file.owner_username, file.local_path, file.shared, file_in_transition.shared_key " +
 					"FROM file_in_transition " +
 					"JOIN file ON file_in_transition.file_id = file.file_id " +
-					"WHERE username_receiving = ?");
+					"WHERE username_receive = ?");
 			stmt.setString(1, username);
 			rs = stmt.executeQuery();
 			
@@ -386,6 +397,7 @@ public class FileTools {
 			}
 			
 		} catch (SQLException e) {
+			e.printStackTrace();
 			throw new DatabaseException("Something happened in DB.", e);
 		} finally {
 			try {
@@ -395,6 +407,7 @@ public class FileTools {
 				if (stmt != null)
 					stmt.close();
 			} catch (SQLException e) {
+				e.printStackTrace();
 				throw new DatabaseException("Something happened to DB.", e);
 			}
 			
@@ -434,7 +447,7 @@ public class FileTools {
 			stmt = db.getConnection().prepareStatement("DELETE FROM file_in_transition " +
 					"WHERE username_sending = ? " +
 					"AND file_id = ? " +
-					"AND username_receiving = ?");
+					"AND username_receive = ?");
 			stmt.setString(1, usernameSending);
 			stmt.setInt(2, fileInfo.getFileId());
 			stmt.setString(3, usernameReceiving);
@@ -449,16 +462,18 @@ public class FileTools {
 				try {
 					db.getConnection().rollback();
 				} catch (SQLException ex) {
+					ex.printStackTrace();
 					throw new DatabaseException("Something wrong happened with DB.", ex);
 				}
 			}
-			
+			e.printStackTrace();
 			throw new DatabaseException("Something wrong happened with DB.", e);
 		} finally {
 			if (stmt != null) {
 				try {
 					stmt.close();
 				} catch (SQLException e) {
+					e.printStackTrace();
 					throw new DatabaseException("Something happened in DB.", e);
 				}
 			}
@@ -543,12 +558,14 @@ public class FileTools {
 			stmt.setString(4, statusText);
 			stmt.executeUpdate();
 		} catch (SQLException e) {
+			e.printStackTrace();
 			throw new DatabaseException("Something happened in database", e);
 		} finally {
 			if (stmt != null)
 				try {
 					stmt.close();
 				} catch (SQLException e) {
+					e.printStackTrace();
 					throw new DatabaseException("Something happened in database", e);
 				}
 		}
