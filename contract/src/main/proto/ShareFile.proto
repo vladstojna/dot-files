@@ -49,6 +49,16 @@ message UnshareRequest {
 message UnshareResponse {
 }
 
+message IsFileSharedRequest {
+    Credentials credentials = 1;
+    string filename = 2;
+    string ownerUsername = 3;
+}
+
+message IsFileSharedResponse {
+    bool isShared = 1;
+}
+
 service ShareFileService {
     rpc shareFile(ShareRequest) returns (ShareResponse);
 
@@ -56,4 +66,6 @@ service ShareFileService {
     rpc fileTotallyShared(FileTotallySharedRequest) returns (FileTotallySharedResponse);
 
     rpc unshareFile(UnshareRequest) returns (UnshareResponse);
+
+    rpc isFileShared(IsFileSharedRequest) returns (IsFileSharedResponse);
 }

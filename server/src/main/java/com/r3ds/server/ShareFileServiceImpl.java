@@ -29,11 +29,45 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 		this.fileTools = fileTools;
 	}
 	
-	/**
-	 *
-	 * @param request
-	 * @param responseObserver
-	 */
+	@Override
+	public void isFileShared(com.r3ds.ShareFile.IsFileSharedRequest request,
+	                         io.grpc.stub.StreamObserver<com.r3ds.ShareFile.IsFileSharedResponse> responseObserver) {
+		
+		try {
+			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
+			
+			FileInfo fileInfo = fileTools.existFileInDB(
+					request.getCredentials().getUsername(),
+					request.getOwnerUsername(),
+					request.getFilename()
+			);
+			
+			if (fileInfo.isNewFile())
+				throw new FileNotFoundException(String.format("File %s was not found.", fileInfo.getFilename()));
+			
+			responseObserver.onNext(ShareFile.IsFileSharedResponse.newBuilder().setIsShared(fileInfo.isShared()).build());
+			responseObserver.onCompleted();
+		} catch (DatabaseException e) {
+			e.printStackTrace();
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("Something unexpected happened with DB.")
+					.withCause(e)
+					.asRuntimeException());
+		} catch (FileNotFoundException e) {
+			logger.error(e.getMessage());
+			responseObserver.onError(Status.NOT_FOUND
+					.withDescription(e.getMessage())
+					.withCause(e)
+					.asRuntimeException());
+		} catch (AuthException e) {
+			logger.info("Username and password provided are not a match.");
+			responseObserver.onError(Status.INTERNAL
+					.withDescription("You are not logged in.")
+					.withCause(e)
+					.asRuntimeException());
+		}
+	}
+	
 	@Override
 	public void shareFile(com.r3ds.ShareFile.ShareRequest request,
 	                      io.grpc.stub.StreamObserver<com.r3ds.ShareFile.ShareResponse> responseObserver) {
@@ -46,8 +80,7 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			fileInfo = fileTools.existFileInDB(
 					request.getCredentials().getUsername(),
 					request.getFile().getOwnerUsername(),
-					request.getFile().getFilename(),
-					false
+					request.getFile().getFilename()
 			);
 			
 			if (fileInfo.isNewFile())
@@ -132,8 +165,7 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			FileInfo fileInfo = fileTools.existFileInDB(
 					request.getRejectedUsername(),
 					request.getFile().getOwnerUsername(),
-					request.getFile().getFilename(),
-					request.getFile().getShared()
+					request.getFile().getFilename()
 			);
 			
 			if (fileInfo.isNewFile())
@@ -142,7 +174,9 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			if (!request.getCredentials().getUsername().equals(request.getFile().getOwnerUsername()))
 				throw new ShareException("The user must be the owner of the file to unshare it.");
 			
-			fileTools.unshareFile(fileInfo, request.getRejectedUsername());
+			// if owner is trying to unshare with himself, this operation will have no effect
+			if (!request.getFile().getOwnerUsername().equals(request.getRejectedUsername()))
+				fileTools.unshareFile(fileInfo, request.getRejectedUsername());
 		} catch (ShareException e) {
 			logger.info("The user ('{}') is not the owner ('{}') of the file.",
 					request.getCredentials().getUsername(), request.getFile().getOwnerUsername());
@@ -229,8 +263,7 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 			FileInfo fileInfo = fileTools.existFileInDB(
 					request.getCredentials().getUsername(),
 					request.getFile().getOwnerUsername(),
-					request.getFile().getFilename(),
-					true
+					request.getFile().getFilename()
 			);
 			
 			if (fileInfo.isNewFile())
