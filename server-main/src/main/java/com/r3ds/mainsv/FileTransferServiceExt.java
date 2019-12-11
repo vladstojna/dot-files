@@ -19,10 +19,11 @@ import com.r3ds.server.FileTransferServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 
 public class FileTransferServiceExt extends FileTransferServiceImpl {
+
+	private static AtomicBoolean BACKUP = new AtomicBoolean(false);
 
 	private Logger logger = LoggerFactory.getLogger(FileTransferServiceExt.class);
 
@@ -57,39 +58,11 @@ public class FileTransferServiceExt extends FileTransferServiceImpl {
 
 	@Override
 	public StreamObserver<UploadData> upload(final StreamObserver<UploadResponse> responseObserver) {
-		StreamObserver<UploadData> result = super.upload(responseObserver);
-
-		final CountDownLatch finishLatch = new CountDownLatch(1);
-		final AtomicBoolean errorHappened = new AtomicBoolean(false);
-
-		StreamObserver<UploadResponse> bckResponseObserver = new StreamObserver<UploadResponse>() {
-			@Override
-			public void onNext(UploadResponse response) {
-				logger.info("Response for file upload received");
-			}
-
-			@Override
-			public void onError(Throwable t) {
-				logger.warn("Error uploading file to server: {}", t.getMessage());
-				finishLatch.countDown();
-				errorHappened.set(true);
-			}
-
-			@Override
-			public void onCompleted() {
-				logger.info("Finished uploading file");
-				finishLatch.countDown();
-			}
-		};
-
-		backupAsyncStub.upload(bckResponseObserver);
-
-		try {
-			finishLatch.await();
-		} catch (InterruptedException e) {
-			throw new RuntimeException(e);
+		if (BACKUP.compareAndSet(false, true)) {
+			return super.upload(responseObserver);
 		}
-
-		return result;
+		else {
+			return backupAsyncStub.upload(responseObserver);
+		}
 	}
 }

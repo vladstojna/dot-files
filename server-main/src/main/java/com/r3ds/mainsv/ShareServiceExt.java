@@ -55,12 +55,7 @@ public class ShareServiceExt extends ShareFileServiceImpl {
 	@Override
 	public void getFilesToShare(Credentials request, StreamObserver<GetFilesToShareResponse> responseObserver) {
 		super.getFilesToShare(request, responseObserver);
-		try {
-			backupStub.getFilesToShare(request);
-			logger.info("Replication RPC finished");
-		} catch (StatusRuntimeException e) {
-			logger.warn("Replication RPC failed: {}", e.getMessage());
-		}
+		logger.info("No replication RPC needed for 'getFilesToShare' operation");
 	}
 
 	@Override
