@@ -13,8 +13,12 @@ import com.r3ds.client.exception.ClientException;
  */
 public class ClientApp
 {
-	private static boolean parseCommand(List<String> args, int numArgs) {
-		if (args.size() != numArgs) {
+	private interface ComparisonFunc {
+		public boolean comp(int a, int b);
+	}
+
+	private static boolean parseCommand(List<String> args, int numArgs, ComparisonFunc cmp) {
+		if (cmp.comp(args.size(), numArgs)) {
 			System.out.println("Unknown command, use 'help' to get a list of commands");
 			return false;
 		}
@@ -22,15 +26,19 @@ public class ClientApp
 	}
 
 	private static boolean parseEmptyCommand(List<String> args) {
-		return parseCommand(args, 0);
+		return parseCommand(args, 0, (a, b) -> a != b);
 	}
 
 	private static boolean parseOneArgumentCommand(List<String> args) {
-		return parseCommand(args, 1);
+		return parseCommand(args, 1, (a, b) -> a != b);
 	}
 
 	private static boolean parseTwoArgumentCommand(List<String> args) {
-		return parseCommand(args, 2);
+		return parseCommand(args, 2, (a, b) -> a != b);
+	}
+
+	private static boolean parseOneTwoArgumentsCommand(List<String> args) {
+		return parseCommand(args, 2, (a, b) -> a > 2 || a < 1);
 	}
 
 	private static void printHelp() {
@@ -47,16 +55,16 @@ public class ClientApp
 		System.out.printf("%-10s%-15s%s%n", "add", "[localpath]", "starts tracking file in 'localpath'");
 		System.out.println();
 
-		System.out.printf("%-10s%-15s%s%n", "download", "[filename]", "downloads file with name 'filename' from server");
-		System.out.printf("%-10s%-15s%s%n", "upload", "[filename]", "uploads file with name 'filename' to server");
-		System.out.printf("%-10s%-15s%s%n", "open", "[filename]", "decrypts file with name 'filename'");
-		System.out.printf("%-10s%-15s%s%n", "close", "[filename]", "encrypts file with 'filename' (must have been opened previously)");
-		System.out.printf("%-25s%s%n", "closeall", "encrypts all opened files");
-		System.out.printf("%-25s%s%n", "list", "lists current user's files");
+		System.out.printf("%-10s%-11s%-10s%s%n", "download", "[filename]", "{owner}", "downloads 'filename' (opt. shared by 'owner') from server");
+		System.out.printf("%-10s%-11s%-10s%s%n", "upload",   "[filename]", "{owner}", "uploads 'filename' (opt. shared by 'owner') to server");
+		System.out.printf("%-10s%-11s%-10s%s%n", "open",     "[filename]", "{owner}", "decrypts 'filename' (opt. shared by 'owner')");
+		System.out.printf("%-10s%-11s%-10s%s%n", "close",    "[filename]", "{owner}", "encrypts 'filename' (opt. shared by 'owner')");
+		System.out.printf("%-31s%s%n", "closeall", "encrypts all opened files");
+		System.out.printf("%-31s%s%n", "list", "lists current user's files");
 		System.out.println();
 		
-		System.out.printf("%-10s%-11s%-10s%s%n", "share", "[filename]", "[user]", "attemps to share file 'filename' with user 'user'");
-		System.out.printf("%-10s%-11s%-10s%s%n", "unshare", "[filename]", "[user]", "attemps to un-share file 'filename' with user 'user'");
+		System.out.printf("%-10s%-11s%-10s%s%n", "share", "[filename]", "[user]", "shares 'filename' with 'user'");
+		System.out.printf("%-10s%-11s%-10s%s%n", "unshare", "[filename]", "[user]", "un-shares 'filename' with 'user'");
 	}
 
 	public static void main(String[] args) throws Exception
@@ -150,17 +158,17 @@ public class ClientApp
 							break;
 
 						case "download":
-							if (parseOneArgumentCommand(arguments)) {
+							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Downloading %s...%n", arguments.get(0));
-								client.download(arguments.get(0));
+								client.download(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
 								System.out.println("Download success");
 							}
 							break;
 
 						case "upload":
-							if (parseOneArgumentCommand(arguments)) {
+							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Uploading %s...%n", arguments.get(0));
-								client.upload(arguments.get(0));
+								client.upload(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
 								System.out.println("Upload success");
 							}
 							break;
@@ -174,17 +182,17 @@ public class ClientApp
 							break;
 
 						case "open":
-							if (parseOneArgumentCommand(arguments)) {
+							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Opening %s...%n", arguments.get(0));
-								client.open(arguments.get(0));
+								client.open(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
 								System.out.println("Open success");
 							}
 							break;
 
 						case "close":
-							if (parseOneArgumentCommand(arguments)) {
+							if (parseOneTwoArgumentsCommand(arguments)) {
 								System.out.printf("Closing %s...%n", arguments.get(0));
-								client.close(arguments.get(0));
+								client.close(arguments.get(0), arguments.size() == 2 ? arguments.get(0) : null);
 								System.out.println("Close success");
 							}
 							break;
