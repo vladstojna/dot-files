@@ -106,7 +106,7 @@ public class CryptoTools {
 			this.keyPairAlgo = keyPairAlgo;
 			this.keyPairLen = keyPairLen;
 			this.bufferSize = bufferSize;
-			this.keyGen = null;
+			initKeyGenerator(encryptionAlgo, keyLen);
 		} catch (NoSuchAlgorithmException | NoSuchPaddingException e) {
 			throw new AssertionError(
 				String.format("%s: error in constructor %s",
