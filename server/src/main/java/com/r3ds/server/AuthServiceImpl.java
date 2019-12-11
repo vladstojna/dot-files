@@ -7,11 +7,15 @@ import com.r3ds.server.exception.AuthException;
 import com.r3ds.server.exception.DatabaseException;
 import io.grpc.Status;
 
-import java.sql.*;
-
 public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 
 	private boolean verbose = true;
+
+	private final AuthTools authTools;
+
+	public AuthServiceImpl(AuthTools authTools) {
+		this.authTools = authTools;
+	}
 
 	@Override
 	public void signup(Credentials request,
@@ -21,7 +25,6 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 			System.out.printf("Signup - create account with username %s%n", request.getUsername());
 
 		try {
-			AuthTools authTools = new AuthTools();
 			authTools.signup(request.getUsername(), request.getPassword());
 		} catch (AuthException e) {
 			System.out.println(e.getMessage());
@@ -57,7 +60,6 @@ public class AuthServiceImpl extends AuthServiceGrpc.AuthServiceImplBase {
 			System.out.printf("Login - verify if exists account with username %s%n", request.getUsername());
 	
 		try {
-			AuthTools authTools = new AuthTools();
 			authTools.login(request.getUsername(), request.getPassword());
 		} catch (DatabaseException e) {
 			e.printStackTrace();

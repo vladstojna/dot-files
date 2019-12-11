@@ -1,13 +1,11 @@
 package com.r3ds.server;
 
-import java.io.IOException;
-
 /**
  * Server app
  */
 public class ServerApp
 {
-	public static void main(String[] args) throws IOException, InterruptedException
+	public static void main(String[] args) throws Exception
 	{
 		System.out.println(ServerApp.class.getSimpleName());
 

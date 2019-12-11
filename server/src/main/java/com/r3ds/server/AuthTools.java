@@ -4,12 +4,17 @@ import com.r3ds.server.exception.AuthException;
 import com.r3ds.server.exception.DatabaseException;
 import org.mindrot.jbcrypt.BCrypt;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class AuthTools {
+
+	private final Database db;
+
+	public AuthTools(Database db) {
+		this.db = db;
+	}
 	
 	/**
 	 *
@@ -18,11 +23,10 @@ public class AuthTools {
 	 * @throws AuthException
 	 */
 	public void signup(String username, String password) throws AuthException, DatabaseException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		
 		try {
-			db = new Database();
+			db.openConnection();
 			stmt = db.getConnection()
 					.prepareStatement("INSERT INTO r3ds_user(username, password) VALUES (?, ?)");
 			stmt.setString(1, username);
@@ -55,12 +59,11 @@ public class AuthTools {
 	 * @throws AuthException
 	 */
 	public void login(String username, String password) throws AuthException, DatabaseException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		ResultSet rs = null;
 		
 		try {
-			db = new Database();
+			db.openConnection();
 			stmt = db.getConnection().prepareStatement("SELECT password " +
 					"FROM r3ds_user " +
 					"WHERE username = ?"
@@ -74,6 +77,7 @@ public class AuthTools {
 			if (passwordInDb == null || !BCrypt.checkpw(password, passwordInDb))
 				throw new AuthException("There are no user with that username and password combination.");
 		} catch (SQLException e) {
+			e.printStackTrace();
 			throw new DatabaseException("Something happened with database.", e);
 		} finally {
 			try {

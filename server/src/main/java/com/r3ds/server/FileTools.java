@@ -22,6 +22,12 @@ public class FileTools {
 		UNSHARE,
 		DELETE
 	}
+
+	private final Database db;
+
+	public FileTools(Database db) {
+		this.db = db;
+	}
 	
 	/**
 	 *
@@ -34,13 +40,12 @@ public class FileTools {
 	 */
 	public FileInfo existFileInDB(String currentUsername, String ownerUsername, String filename,
 	                              boolean shared) throws DatabaseException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		ResultSet rs = null;
 		FileInfo fileInfo = new FileInfo(currentUsername, ownerUsername, filename, shared);
 		
 		try {
-			db = new Database();
+			db.openConnection();
 			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.local_path, user_file.shared_key " +
 					"FROM file " +
 					"JOIN user_file ON file.file_id = user_file.file_id " +
@@ -88,13 +93,12 @@ public class FileTools {
 	 */
 	public FileInfo createFileInDB(FileInfo fileInfo, String path, boolean shared)
 			throws DatabaseException, FileInfoException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		
 		fileInfo.setPath(path);
 		
 		try {
-			db = new Database();
+			db.openConnection();
 			db.getConnection().setAutoCommit(false);
 			
 			stmt = db.getConnection().prepareStatement("INSERT INTO file(filename, shared, owner_username, local_path) " +
@@ -169,11 +173,10 @@ public class FileTools {
 	public FileInfo shareFile(FileInfo fileInfo, String usernameSending, String usernameReceiving,
 	                          byte[] sharedKeyFromUserSending, byte[] sharedKeyFromUserReceiving)
 			throws DatabaseException, FileInfoException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		
 		try {
-			db = new Database();
+			db.openConnection();
 			db.getConnection().setAutoCommit(false);
 			
 			// update shared status and local path in server
@@ -264,11 +267,10 @@ public class FileTools {
 	 * @throws DatabaseException
 	 */
 	public void unshareFile(FileInfo fileInfo, String rejectedUsername) throws DatabaseException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		
 		try {
-			db = new Database();
+			db.openConnection();
 			stmt = db.getConnection().prepareStatement("DELETE FROM user_file " +
 					"WHERE username = ? " +
 					"AND file_id = ?");
@@ -299,13 +301,13 @@ public class FileTools {
 	 * @throws DatabaseException
 	 */
 	public List<FileInfo> getAllFiles(String username) throws DatabaseException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		ResultSet rs = null;
 		
 		List<FileInfo> files = new ArrayList<>();
 		
 		try {
+			db.openConnection();
 			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.filename, " +
 					"file.owner_username, file.local_path, file.shared " +
 					"FROM file " +
@@ -354,13 +356,13 @@ public class FileTools {
 	 * @throws DatabaseException
 	 */
 	public List<FileInfo> getFilesToShare(String username) throws DatabaseException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		ResultSet rs = null;
 		
 		List<FileInfo> files = new ArrayList<>();
 		
 		try {
+			db.openConnection();
 			stmt = db.getConnection().prepareStatement("SELECT file.file_id, file.filename, " +
 						"file.owner_username, file.local_path, file.shared, file_in_transition.shared_key " +
 					"FROM file_in_transition " +
@@ -412,11 +414,10 @@ public class FileTools {
 	 */
 	public void fileIsTotallyShared(FileInfo fileInfo, String usernameSending, String usernameReceiving,
 	                                byte[] sharedKeyFromUserReceiving) throws DatabaseException {
-		Database db = null;
 		PreparedStatement stmt = null;
 		
 		try {
-			db = new Database();
+			db.openConnection();
 			db.getConnection().setAutoCommit(false);
 			
 			// update people who have access to file
@@ -476,7 +477,9 @@ public class FileTools {
 	 * @throws DatabaseException
 	 */
 	public FileInfo saveFileReadInLog(FileInfo fileInfo, String username) throws DatabaseException {
-		this.logActionInFile((new Database()).getConnection(), fileInfo, username, LogStatus.READ);
+		db.openConnection();
+		this.logActionInFile(db.getConnection(), fileInfo, username, LogStatus.READ);
+		db.closeConnection();
 		return fileInfo;
 	}
 	
@@ -488,7 +491,9 @@ public class FileTools {
 	 * @throws DatabaseException
 	 */
 	public FileInfo saveFileWriteInLog(FileInfo fileInfo, String username) throws DatabaseException {
-		this.logActionInFile((new Database()).getConnection(), fileInfo, username, LogStatus.UPDATE_CONTENT);
+		db.openConnection();
+		this.logActionInFile(db.getConnection(), fileInfo, username, LogStatus.UPDATE_CONTENT);
+		db.closeConnection();
 		return fileInfo;
 	}
 	

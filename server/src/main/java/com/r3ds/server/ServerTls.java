@@ -2,6 +2,7 @@ package com.r3ds.server;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Properties;
 import java.util.logging.Logger;
 
 import javax.net.ssl.SSLException;
@@ -43,11 +44,15 @@ public class ServerTls {
 		return GrpcSslContexts.configure(sslClientContextBuilder).build();
 	}
 
-	public void start() throws IOException {
+	public void start() throws Exception {
+		Database db = createDatabase();
+		AuthTools authTools = new AuthTools(db);
+		FileTools fileTools = new FileTools(db);
 		server = NettyServerBuilder.forPort(port)
 			.addService(new PingServiceImpl())
-			.addService(new AuthServiceImpl())
-			.addService(new FileTransferServiceImpl())
+			.addService(new AuthServiceImpl(authTools))
+			.addService(new FileTransferServiceImpl(authTools, fileTools))
+			.addService(new ShareFileServiceImpl(authTools, fileTools))
 			.sslContext(getSslContext())
 			.build()
 			.start();
@@ -61,6 +66,13 @@ public class ServerTls {
 				System.err.println("*** server shut down");
 			}
 		});
+	}
+
+	private Database createDatabase() throws Exception {
+		String rsrcName = "database/config.properties";
+		Properties props = new Properties();
+		props.load(ServerTls.class.getClassLoader().getResourceAsStream(rsrcName));
+		return new Database(props);
 	}
 
 	private void stop() {

@@ -33,13 +33,18 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 
 	private static final int BUFFER_SIZE = 4096;
 
+	private final AuthTools authTools;
+	private final FileTools fileTools;
+
+	public FileTransferServiceImpl(AuthTools authTools, FileTools fileTools) {
+		this.authTools = authTools;
+		this.fileTools = fileTools;
+	}
+
 	@Override
 	public void download(DownloadRequest request, StreamObserver<Chunk> responseObserver) {
 		try {
-			AuthTools authTools = new AuthTools();
 			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
-			
-			FileTools fileTools = new FileTools();
 			
 			logger.info("Download request from '{}' for file '{}' (owner: '{}'; shared: {})",
 				request.getCredentials().getUsername(), request.getFile().getFilename(),
@@ -103,10 +108,8 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 	public void downloadKey(com.r3ds.FileTransfer.DownloadKeyRequest request,
 	                        io.grpc.stub.StreamObserver<com.r3ds.FileTransfer.DownloadKeyResponse> responseObserver) {
 		try {
-			AuthTools authTools = new AuthTools();
 			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
-			
-			FileTools fileTools = new FileTools();
+
 			FileInfo fileInfo = fileTools.existFileInDB(
 					request.getCredentials().getUsername(),
 					request.getFile().getOwnerUsername(),
@@ -165,7 +168,6 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				
 				
 				try {
-					FileTools fileTools = new FileTools();
 					Path filePath = fileTools.getLocalPathToDirectoryForUsername(
 							uploadData.getFile().getOwnerUsername(),
 							uploadData.getFile().getShared()
@@ -221,14 +223,12 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 				responseObserver.onNext(UploadResponse.newBuilder().build());
 				
 				try {
-					AuthTools authTools = new AuthTools();
 					authTools.login(
 							lastUploadData.getCredentials().getUsername(),
 							lastUploadData.getCredentials().getPassword()
 					);
 					
 					// check database if file already exists
-					FileTools fileTools = new FileTools();
 					FileInfo fileInfo = fileTools.existFileInDB(
 							lastUploadData.getCredentials().getUsername(),
 							lastUploadData.getFile().getOwnerUsername(),
@@ -288,12 +288,10 @@ public class FileTransferServiceImpl extends FileTransferServiceImplBase {
 	public void listFiles(com.r3ds.Common.Credentials request,
 	                      io.grpc.stub.StreamObserver<com.r3ds.FileTransfer.ListResponse> responseObserver) {
 		try {
-			AuthTools authTools = new AuthTools();
 			authTools.login(request.getUsername(), request.getPassword());
-			
+
 			FileTransfer.ListResponse.Builder responseBuilder = FileTransfer.ListResponse.newBuilder();
-			
-			FileTools fileTools = new FileTools();
+
 			List<FileInfo> files = fileTools.getAllFiles(request.getUsername());
 			for (FileInfo file : files) {
 				Common.FileData.Builder fileBuilder = Common.FileData.newBuilder();

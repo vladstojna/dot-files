@@ -20,6 +20,14 @@ import java.util.List;
 public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceImplBase {
 	
 	private final Logger logger = LoggerFactory.getLogger(getClass());
+
+	private final AuthTools authTools;
+	private final FileTools fileTools;
+
+	public ShareFileServiceImpl(AuthTools authTools, FileTools fileTools) {
+		this.authTools = authTools;
+		this.fileTools = fileTools;
+	}
 	
 	/**
 	 *
@@ -29,8 +37,6 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 	@Override
 	public void shareFile(com.r3ds.ShareFile.ShareRequest request,
 	                      io.grpc.stub.StreamObserver<com.r3ds.ShareFile.ShareResponse> responseObserver) {
-		AuthTools authTools = new AuthTools();
-		FileTools fileTools = new FileTools();
 		FileInfo fileInfo = null;
 		String fileToDeletePath = null;
 		
@@ -119,8 +125,6 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 	@Override
 	public void unshareFile(com.r3ds.ShareFile.UnshareRequest request,
 	                        io.grpc.stub.StreamObserver<com.r3ds.ShareFile.UnshareResponse> responseObserver) {
-		AuthTools authTools = new AuthTools();
-		FileTools fileTools = new FileTools();
 		
 		try {
 			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
@@ -175,8 +179,6 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 	@Override
 	public void getFilesToShare(com.r3ds.Common.Credentials request,
 	                            io.grpc.stub.StreamObserver<com.r3ds.ShareFile.GetFilesToShareResponse> responseObserver) {
-		AuthTools authTools = new AuthTools();
-		FileTools fileTools = new FileTools();
 		
 		try {
 			authTools.login(request.getUsername(), request.getPassword());
@@ -220,8 +222,6 @@ public class ShareFileServiceImpl extends ShareFileServiceGrpc.ShareFileServiceI
 	@Override
 	public void fileTotallyShared(com.r3ds.ShareFile.FileTotallySharedRequest request,
 	                              io.grpc.stub.StreamObserver<com.r3ds.ShareFile.FileTotallySharedResponse> responseObserver) {
-		AuthTools authTools = new AuthTools();
-		FileTools fileTools = new FileTools();
 		
 		try {
 			authTools.login(request.getCredentials().getUsername(), request.getCredentials().getPassword());
