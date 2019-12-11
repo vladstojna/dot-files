@@ -2,9 +2,7 @@ package com.r3ds.client;
 
 import com.google.common.hash.Hashing;
 import com.google.protobuf.ByteString;
-import com.r3ds.AuthServiceGrpc;
-import com.r3ds.CertificateServiceGrpc;
-import com.r3ds.FileTransferServiceGrpc;
+import com.r3ds.*;
 import com.r3ds.Common.Credentials;
 import com.r3ds.Common.FileData;
 import com.r3ds.FileTransfer.Chunk;
@@ -12,8 +10,6 @@ import com.r3ds.FileTransfer.DownloadRequest;
 import com.r3ds.FileTransfer.ListResponse;
 import com.r3ds.FileTransfer.UploadData;
 import com.r3ds.FileTransfer.UploadResponse;
-import com.r3ds.PingServiceGrpc;
-import com.r3ds.ShareFileServiceGrpc;
 import com.r3ds.Certification.CertificateRequest;
 import com.r3ds.Certification.CertificateResponse;
 import com.r3ds.Certification.CertificateSignatureRequest;
@@ -49,6 +45,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
+import java.security.Key;
 import java.security.KeyPair;
 import java.security.SignatureException;
 import java.security.cert.Certificate;
@@ -158,6 +155,8 @@ public class ClientTls {
 
 	// maintains a set of opened files
 	private Set<FileInfo> openFiles;
+	
+	private Thread threadCheckShared;
 
 	/**
 	 * Builds SSL context
@@ -446,7 +445,10 @@ public class ClientTls {
 	public void logout() throws ClientException, ClientAggregateException {
 		if (!isLoggedIn)
 			throw new ClientException("Not logged in");
-
+		
+		if (!threadCheckShared.isInterrupted())
+			threadCheckShared.interrupt();
+		
 		try {
 			justCloseAll();
 		} finally {
@@ -472,6 +474,8 @@ public class ClientTls {
 
 		BufferedOutputStream writer = null;
 		try {
+			
+			
 			DownloadRequest request = DownloadRequest.newBuilder()
 				.setCredentials(
 					Credentials.newBuilder()
@@ -689,9 +693,38 @@ public class ClientTls {
 			}
 
 			// TODO: download document specific key if file is shared
-
+			Credentials credentials = Credentials.newBuilder()
+					.setUsername(this.username)
+					.setPassword(this.passwordHash)
+					.build();
+			
+			ShareFile.IsFileSharedRequest IsFileSharedRequest = ShareFile.IsFileSharedRequest.newBuilder()
+					.setCredentials(credentials)
+					.setFilename(fileInfo.getName())
+					.setOwnerUsername(fileInfo.getOwner())
+					.build();
+			ShareFile.IsFileSharedResponse isFileSharedResponse = shareBlockingStub.isFileShared(IsFileSharedRequest);
+			
+			Key fileKey = this.symmetricKey;
+			if (isFileSharedResponse.getIsShared()) {
+				FileData file = FileData.newBuilder()
+						.setFilename(fileInfo.getName())
+						.setOwnerUsername(fileInfo.getOwner())
+						.setShared(true)
+						.build();
+				
+				FileTransfer.DownloadKeyRequest keyRequest = FileTransfer.DownloadKeyRequest.newBuilder()
+						.setCredentials(credentials)
+						.setFile(file)
+						.build();
+				FileTransfer.DownloadKeyResponse keyResponse = fileTransferBlockingStub.downloadKey(keyRequest);
+				
+				byte[] obtainedKey = keyResponse.getSharedKey().toByteArray();
+				fileKey = cryptoHelper.unwrapKey(obtainedKey, this.symmetricKey);
+			}
+			
 			tempPath = Paths.get(destDirectory.toString(), filename + "_");
-			cryptoHelper.decrypt(destPath.toString(), tempPath.toString(), this.symmetricKey);
+			cryptoHelper.decrypt(destPath.toString(), tempPath.toString(), fileKey);
 			Files.move(tempPath, destPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
 			openFiles.add(fileInfo);
@@ -921,13 +954,13 @@ public class ClientTls {
 
 			documentKey = cryptoHelper.generateKey();
 
-			open(filename, null);
+			open(filename, this.username);
 			// hack: swap main key with document key just during this function
 			oldKey = this.symmetricKey;
 			this.symmetricKey = documentKey;
-			close(filename, null);
+			close(filename, this.username);
 			this.symmetricKey = oldKey;
-			upload(filename, null);
+			upload(filename, this.username);
 
 			// build share request
 			Credentials creds = Credentials.newBuilder()
@@ -981,6 +1014,9 @@ public class ClientTls {
 			throw new ClientException("Not logged in");
 
 		try {
+			if (this.username.equals(username))
+				throw new ClientException("Un-share failed because the owner of the file cannot un-share with himself.");
+			
 			UnshareRequest unshareReq = UnshareRequest.newBuilder()
 				.setCredentials(Credentials.newBuilder()
 					.setUsername(this.username)
@@ -1007,7 +1043,8 @@ public class ClientTls {
 				checkShared();
 			}
 		};
-		new Thread(r).start();
+		threadCheckShared = new Thread(r);
+		threadCheckShared.start();
 	}
 
 	private void checkShared() {
@@ -1030,6 +1067,9 @@ public class ClientTls {
 				Thread.sleep(1000 * POLLING_INTERVAL);
 			} catch (InterruptedException e) {
 				logger.warn("Shared check interrupted!");
+			} catch (StatusRuntimeException e) {
+				if (!threadCheckShared.isInterrupted())
+					threadCheckShared.interrupt();
 			}
 		}
 	}
@@ -1051,5 +1091,4 @@ public class ClientTls {
 		sb.append(separator).append("-Shared Notification End-").append(separator);
 		return sb.toString();
 	}
-
 }
