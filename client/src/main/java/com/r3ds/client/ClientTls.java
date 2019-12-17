@@ -459,7 +459,7 @@ public class ClientTls {
 	}
 
 	private Path getDestinationPath(String owner) {
-		if (owner == null)
+		if (owner == null || owner == this.username)
 			return Paths.get(SYSTEM_PATH.toString(), this.username);
 		return Paths.get(SYSTEM_PATH.toString(), this.username, SHARED_PATH.toString(), owner);
 	}
@@ -597,8 +597,10 @@ public class ClientTls {
 				}
 			}
 
-			if (BACKUP.compareAndSet(true, false))
+			if (BACKUP.compareAndSet(true, false)) {
 				upload(filename, owner);
+				BACKUP.compareAndSet(false, true);
+			}
 
 		} catch (IOException e) {
 			logger.error("Could not read file: {}", e.getMessage());

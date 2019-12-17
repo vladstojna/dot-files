@@ -68,6 +68,7 @@ public class FileTransferServiceExt extends FileTransferServiceImpl {
 				return super.upload(responseObserver);
 			}
 			else {
+				BACKUP.compareAndSet(true, false);
 				return backupAsyncStub.upload(responseObserver);
 			}
 		} finally {
