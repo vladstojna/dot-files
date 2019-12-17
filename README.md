@@ -1,14 +1,23 @@
-# Ransomware Resistant Remote Document Sharing
+# R3DS - Ransomware Resistant Remote Document Sharing
 
 Steps to do the setup:
 
-1 - in main directory, run mvn install
-2 - create a database in Postgres with schema.sql (in main directory)
-3 - setup config.properties in dot-files/server/src/main/resources/database based in config.properties.default
-4 - setup config.properties in dot-files/client/src/main/resources/database based in config.properties.default
+1. We have to setup the database:
+    - in the email sent to the professors, a config.properties was attached containing the configuration data needed if the setup is made with our database in sigma
+    - go to server/src/main/resources/database
+    - copy config.properties.default to its current folder and rename it to config.properties
+    - edit config.properties with the database info found in the config file attached in the email
 
-To run:
+2. Setup the config files in client now:
+    - go to client/src/main/resources
+    - copy config.properties.default to its current folder and rename it to config.properties
+    - edit config.properties (already filled with the default configurations)
 
-1 - go to dot-files/rootca and run mvn exec:java
-2 - go to dot-files/server and run mvn exec:java
-3 - go to dot-files/client and run mvn exec:java
+3. Now it is time to run the system. For that, please do the following:
+    - in the project's root folder, run mvn install
+    - if you want to install each entity separately, go to the root folder of each entity and run mvn install
+    - finally, in this order
+      - open a new terminal, go to rootca and do mvn exec:java
+      - open a new terminal, go to server and do mvn exec:java
+      - open a new terminal, go to client and do mvn exec:java
+        - open a new terminal for each client you want to execute

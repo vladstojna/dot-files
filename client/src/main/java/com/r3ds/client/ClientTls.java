@@ -110,7 +110,7 @@ final class FileInfo {
 
 	@Override
 	public int hashCode() {
-		return (name.hashCode() << 1) + owner == null ? 0 : owner.hashCode();
+		return (name.hashCode() << 1) + (owner == null ? 0 : owner.hashCode());
 	}
 }
 
