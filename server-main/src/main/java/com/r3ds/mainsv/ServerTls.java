@@ -1,5 +1,6 @@
 package com.r3ds.mainsv;
 
+import com.r3ds.AuthServiceGrpc;
 import com.r3ds.FileTransferServiceGrpc;
 import com.r3ds.IntegrityCheckServiceGrpc;
 import com.r3ds.PingServiceGrpc;
@@ -38,6 +39,7 @@ public class ServerTls {
 	private final int backupPort;
 
 	private PingServiceGrpc.PingServiceBlockingStub pingBlockingStub;
+	private AuthServiceGrpc.AuthServiceBlockingStub authBlockingStub;
 	private ShareFileServiceGrpc.ShareFileServiceBlockingStub shareBlockingStub;
 	private FileTransferServiceGrpc.FileTransferServiceBlockingStub fileTransferBlockingStub;
 	private FileTransferServiceGrpc.FileTransferServiceStub fileTransferStub;
@@ -91,6 +93,7 @@ public class ServerTls {
 			.build();
 
 		pingBlockingStub = PingServiceGrpc.newBlockingStub(channel);
+		authBlockingStub = AuthServiceGrpc.newBlockingStub(channel);
 		shareBlockingStub = ShareFileServiceGrpc.newBlockingStub(channel);
 		fileTransferBlockingStub = FileTransferServiceGrpc.newBlockingStub(channel);
 		fileTransferStub = FileTransferServiceGrpc.newStub(channel);
@@ -98,7 +101,7 @@ public class ServerTls {
 
 		server = NettyServerBuilder.forPort(port)
 			.addService(new PingServiceExt(pingBlockingStub))
-			.addService(new AuthServiceImpl(authTools))
+			.addService(new AuthServiceExt(authTools, authBlockingStub))
 			.addService(new FileTransferServiceExt(authTools, fileTools, fileTransferBlockingStub, fileTransferStub))
 			.addService(new ShareServiceExt(authTools, fileTools, shareBlockingStub))
 			.sslContext(getServerSslContext())

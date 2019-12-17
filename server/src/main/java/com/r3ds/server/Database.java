@@ -37,7 +37,7 @@ public class Database {
 		try {
 			Class.forName("org.postgresql.Driver");
 			this.conn = DriverManager.getConnection(getUrl(), dbUsername, dbPassword);
-			PreparedStatement stmt = conn.prepareStatement("SET search_path TO 'dot-files'");
+			PreparedStatement stmt = conn.prepareStatement("SET search_path TO r3ds_schema");
 			stmt.execute();
 			stmt.close();
 		} catch (SQLException | ClassNotFoundException e) {
