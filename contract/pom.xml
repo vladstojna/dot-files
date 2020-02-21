@@ -26,7 +26,7 @@
 		<javax-annotation.version>1.3.2</javax-annotation.version>
 
 		<boringssl.version>2.0.27.Final</boringssl.version>
-		<netty-handler.version>4.1.43.Final</netty-handler.version>
+		<netty-handler.version>4.1.45.Final</netty-handler.version>
 
 		<!-- gRPC properties -->
 		<grpc.version>1.25.0</grpc.version>
